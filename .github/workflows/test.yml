@@ -1,0 +1,23 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - name: Unit tests
+        run: bun test
+      - name: Shell scripts parse
+        run: bash -n install.sh && bash -n bin/claude-jev
+      - name: Plugin and marketplace versions agree
+        run: |
+          plugin=$(jq -r .version .claude-plugin/plugin.json)
+          market=$(jq -r '.plugins[] | select(.name == "jev-pilot") | .version' .claude-plugin/marketplace.json)
+          echo "plugin.json $plugin, marketplace.json $market"
+          test "$plugin" = "$market"

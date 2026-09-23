@@ -1,29 +1,98 @@
 #!/usr/bin/env bash
-# claude-jev — Claude Code with the jev-pilot plugin loaded: Jev decides the
-# reasoning effort, subagent models, strategy and skill for each prompt.
+# claude-jev — Claude Code with jev-pilot on: Jev decides the reasoning effort,
+# subagent models, strategy and skill for each prompt.
 #
-# Every argument is passed through to `claude` (`claude-jev -c`, `claude-jev -p "..."`).
-# Link it onto your PATH: ln -s "$PWD/bin/claude-jev" ~/.local/bin/claude-jev
+#   claude-jev [claude arguments…]   every argument goes to `claude` (-c, -p "…", …)
+#   claude-jev self-update           update jev-pilot and show what changed
+#
+# Two ways it can be installed, and it works with either:
+#   marketplace  `claude plugin install jev-pilot@jev-pilot` (what install.sh does
+#                when piped from curl): Claude Code loads the plugin itself, so
+#                this only turns function hooks on.
+#   clone        a git clone, loaded with --plugin-dir (for development). Once a
+#                day it checks the clone's upstream in the background and says so
+#                on the next launch; JEV_PILOT_NO_UPDATE_CHECK=1 turns that off.
 set -euo pipefail
 
-# The plugin is the folder above this script, found through any symlinks
+settings="${CLAUDE_SETTINGS:-$HOME/.claude/settings.json}"
+
+# Enabled from a marketplace in user settings: Claude Code loads it, and
+# adding --plugin-dir too would load it twice.
+marketplace_install() {
+  [[ -z "${JEV_PILOT_DIR:-}" && -f "$settings" ]] &&
+    grep -Eq '"jev-pilot@[^"]+"[[:space:]]*:[[:space:]]*true' "$settings"
+}
+marketplace_name() {
+  grep -Eo '"jev-pilot@[^"]+"[[:space:]]*:[[:space:]]*true' "$settings" | head -1 | sed -E 's/^"jev-pilot@([^"]+)".*/\1/'
+}
+
+# The clone: the folder above this script, found through any symlinks
 # (portable: no `readlink -f`, which older macOS lacks).
-source="${BASH_SOURCE[0]}"
-while [[ -L "$source" ]]; do
-  dir="$(cd -P "$(dirname "$source")" && pwd)"
-  source="$(readlink "$source")"
-  [[ "$source" != /* ]] && source="$dir/$source"
-done
-plugin_dir="${JEV_PILOT_DIR:-$(cd -P "$(dirname "$source")/.." && pwd)}"
+clone_dir() {
+  if [[ -n "${JEV_PILOT_DIR:-}" ]]; then echo "$JEV_PILOT_DIR"; return; fi
+  local source="${BASH_SOURCE[0]}" dir
+  while [[ -L "$source" ]]; do
+    dir="$(cd -P "$(dirname "$source")" && pwd)"
+    source="$(readlink "$source")"
+    [[ "$source" != /* ]] && source="$dir/$source"
+  done
+  cd -P "$(dirname "$source")/.." && pwd
+}
 
-if [[ ! -f "$plugin_dir/.claude-plugin/plugin.json" ]]; then
-  echo "claude-jev: no jev-pilot plugin at $plugin_dir (set JEV_PILOT_DIR)" >&2
-  exit 1
-fi
-if ! command -v claude >/dev/null 2>&1; then
-  echo "claude-jev: Claude Code (claude) is not on your PATH" >&2
-  exit 1
-fi
-
+command -v claude >/dev/null 2>&1 || { echo "claude-jev: Claude Code (claude) is not on your PATH" >&2; exit 1; }
 export CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1
+
+if marketplace_install; then
+  if [[ "${1:-}" == "self-update" ]]; then
+    market="$(marketplace_name)"
+    claude plugin marketplace update "$market"
+    claude plugin update "jev-pilot@$market"
+    exit 0
+  fi
+  exec claude "$@"
+fi
+
+plugin_dir="$(clone_dir)"
+if [[ ! -f "$plugin_dir/.claude-plugin/plugin.json" ]]; then
+  echo "claude-jev: jev-pilot is not installed (no marketplace install, no clone at $plugin_dir)." >&2
+  echo "  Install it: curl -fsSL https://raw.githubusercontent.com/Akramovic1/jev-pilot/main/install.sh | bash" >&2
+  exit 1
+fi
+
+version_of() { grep -Eo '"version"[[:space:]]*:[[:space:]]*"[^"]+"' "$plugin_dir/.claude-plugin/plugin.json" | head -1 | grep -Eo '[0-9][^"]*'; }
+is_clone() { command -v git >/dev/null 2>&1 && git -C "$plugin_dir" rev-parse --abbrev-ref '@{u}' >/dev/null 2>&1; }
+
+if [[ "${1:-}" == "self-update" ]]; then
+  is_clone || { echo "claude-jev: $plugin_dir is not a git clone with an upstream; update it by hand" >&2; exit 1; }
+  before="$(git -C "$plugin_dir" rev-parse HEAD)"
+  old="$(version_of)"
+  git -C "$plugin_dir" pull --ff-only --quiet || {
+    echo "claude-jev: could not fast-forward $plugin_dir (local changes or a diverged branch)" >&2
+    exit 1
+  }
+  if [[ "$(git -C "$plugin_dir" rev-parse HEAD)" == "$before" ]]; then
+    echo "jev-pilot $old is up to date."
+  else
+    echo "jev-pilot $old → $(version_of):"
+    git -C "$plugin_dir" log --format='  • %s' "$before..HEAD"
+    echo "Restart any running claude-jev session to use it."
+  fi
+  exit 0
+fi
+
+# Update notice: compare with what the last background fetch saw (instant),
+# and refresh that at most once a day, detached, so launch never waits on it.
+if [[ -z "${JEV_PILOT_NO_UPDATE_CHECK:-}" ]] && is_clone; then
+  behind="$(git -C "$plugin_dir" rev-list --count 'HEAD..@{u}' 2>/dev/null || echo 0)"
+  if [[ "$behind" -gt 0 ]]; then
+    echo "jev-pilot: an update is available ($behind new commit$([[ $behind -gt 1 ]] && echo s)). Run: claude-jev self-update" >&2
+  fi
+  stamp="$(git -C "$plugin_dir" rev-parse --git-dir)/jev-pilot-last-fetch"
+  [[ "$stamp" == /* ]] || stamp="$plugin_dir/$stamp"
+  if [[ ! -f "$stamp" || -n "$(find "$stamp" -mmin +1440 2>/dev/null)" ]]; then
+    touch "$stamp" 2>/dev/null || true
+    (git -C "$plugin_dir" fetch --quiet >/dev/null 2>&1 &) || true
+  fi
+fi
+
 exec claude --plugin-dir "$plugin_dir" "$@"
