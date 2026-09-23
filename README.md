@@ -31,7 +31,7 @@
 |---|---|---|
 | 🧠 | **Reasoning effort**, `low` → `xhigh` | at the start of each turn |
 | 🚨 | **Raise effort, up to `max`**, when tool calls keep failing | mid-turn, at most once |
-| 🤖 | **Subagent model**: Haiku, Sonnet or Opus | when a subagent starts |
+| 🤖 | **Subagent model and effort**: Haiku, Sonnet or Opus, `low` → `xhigh` | when a subagent starts |
 | 🧭 | **Strategy**: do it directly, delegate, run in parallel, or plan a graph | at the start of each turn, as advice |
 | 🧩 | **The one skill** the prompt needs, if any | at the start of each turn |
 | 📊 | **A record of every decision**, with tuning suggestions | always, via `/jev-pilot:report` |
@@ -157,7 +157,9 @@ flowchart LR
 - The last 4 messages, capped at 2000 characters: text and tool names only, never tool input or output. So "yes, do it" is judged as the work it agrees to.
 - Plain facts about the request: its length, how many files it names, whether it contains code or an error, whether it's a question, and what recent turns did with their tools.
 
-**Subagents.** Each one gets the cheapest tier that can do its brief well: `haiku`, `sonnet` or `opus`. These are family names, so Claude Code uses its current release of each. No versions are hardcoded.
+**Subagents.** Each one gets the cheapest tier that can do its brief well: `haiku`, `sonnet` or `opus`. These are family names, so Claude Code uses its current release of each. No versions are hardcoded. It also gets an effort from the same decision, on the same rubric and bars as the main conversation. The Agent tool has no effort setting, so jev-pilot sets it on each request the subagent makes.
+
+**Claude knows it's there.** On the first prompt of each session (and after a compaction), Claude gets a short note listing what jev-pilot decides, so it leaves those decisions alone: it won't pin a subagent's model or effort, or make agent types just to fix one, unless you ask.
 
 **Strategy.** The same request asks how to carry the work out:
 - **`direct`**: the usual case, and nothing is attached.
@@ -251,6 +253,7 @@ Every option has a sensible default. On a marketplace install, change options wi
 | `escalateAfterErrors` | 2 | failed tool calls in a row before a raise; 0 turns raising off |
 | `effortCloseMargin` | 0.15 | how close two levels must be for the higher to win |
 | `fastModel` / `balancedModel` / `deepModel` | `haiku` / `sonnet` / `opus` | subagent tiers: family names or full ids |
+| `routeSubagentEffort` | true | also set each subagent's reasoning effort |
 | `routeMainModel` | false | also switch the main conversation's model (invalidates the prompt cache); if Claude Code falls back to another model mid-turn (overload), the fallback stands |
 | `suggestStrategy` | true | ask for and attach strategy advice |
 | `graphSkill` | — | a heavier orchestration skill the `graph` advice may mention |

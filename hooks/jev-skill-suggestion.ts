@@ -74,7 +74,7 @@
 import type { Register } from 'claude-code'
 import { missOf } from './model-router.policy.ts'
 import { NOT_A_TASK, recentContext } from './context.ts'
-import { noteSkill } from './summary.ts'
+import { noteSkill, resetBriefing } from './summary.ts'
 import { feature } from './features.ts'
 import {
   DEFAULT_BASE_URL,
@@ -536,7 +536,12 @@ export const register: Register = (on, options) => {
     return next(e)
   })
   on('session.compact', async ($, e, next) => {
-    if (!e.agentId) injected.clear()
+    if (!e.agentId) {
+      injected.clear()
+      // The compacted conversation no longer holds the router's note to the
+      // model about what jev-pilot does: it is given again on the next prompt.
+      resetBriefing()
+    }
     return next(e)
   })
 

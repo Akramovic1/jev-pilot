@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.7 — 2026-09-24
+
+- **Subagent effort.** Each subagent now gets a reasoning effort as well as a model, from the same decision, with the same rubric and confidence bars as the main conversation. The Agent tool takes no effort, so jev-pilot sets it on every request the subagent makes. Models without an effort setting are left alone. Option `routeSubagentEffort` (on by default), under the `/jev subagents` switch.
+- **Claude knows jev-pilot is there.** On the first prompt of each session, and again after a compaction, Claude gets a short note listing what jev-pilot decides (only the parts switched on), so it leaves those decisions alone: it won't pin a subagent's model or effort, or create agent types just to fix one, unless you ask.
+- **Turns nobody typed keep the bubble.** A subagent's or a background task's notification starts a turn that was never put to Jev; the bubble no longer calls that "no answer in time".
+
 ## 0.4.6 — 2026-09-23
 
 - **A busy Jev stays quiet.** When Jev doesn't answer in time or its backend is overloaded (HTTP 429, 502, 503, 529), nothing is written in the conversation any more; that's in the verbose log. The pet's bubble says which it was: `no answer in time · left as is` or `jev busy · left as is`. Real errors (a bad key, a malformed request) still show, and the bubble says `jev error · left as is`.
