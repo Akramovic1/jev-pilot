@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.3 — 2026-09-23
+
+**Clawd the pilot.** jev-pilot no longer writes in the conversation. It talks through a pet above the prompt, at the right: Clawd, Claude Code's character, as the banner's pilot.
+
+- **It shows what Claude is doing.** Thinking (a thought cloud), reading (an open book), searching (a magnifying glass), writing (paper and a pencil), running commands (a terminal), subagents and other tools (flying, goggles down). Idle, it hovers and blinks, and every few seconds jumps rope, waves or looks around.
+- **Its bubble says what Jev decided**, with how sure Jev was, e.g. `⠋ reading · xhigh · /systematic-debugging · 88% sure`. A kept effort shows as `high kept · wanted low · 42% sure`, a mid-turn raise as `2 fails → max ✈`, a subagent's model as `Explore → haiku`.
+- **`/jev` switches** for every part: `effort`, `raise`, `subagents`, `skills`, `strategy`, `model` and `pet`, each `on|off`, plus `all on|off` and `reset`. They apply live and are remembered across sessions.
+- **New options:** `display` (`pet`, `transcript` for one line per turn, `both`, `off`), `verboseLog` (every step, with each answer's confidence) and `suggestSkills`. `logDecisions` is now the master switch for jev-pilot's messages in the conversation.
+- **Confidence reads as `N% sure`** in the bubble and the turn line, instead of a bare `0.93`.
+- The README has a new animated pet image and demo, drawn from the plugin's own pixel art (`scripts/assets/pet.py`, `demo.py`).
+
 ## 0.4.2 — 2026-09-23
 
 Fixes from the automated reviews of claude-code-templates#975 (Greptile, Copilot, cubic):

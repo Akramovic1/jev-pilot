@@ -17,6 +17,7 @@
 <p align="center">
   <a href="#-install">Install</a> ·
   <a href="#-how-it-works">How it works</a> ·
+  <a href="#%EF%B8%8F-meet-the-pilot">The pet</a> ·
   <a href="#-see-if-its-paying-off">Report</a> ·
   <a href="#%EF%B8%8F-configuration">Configuration</a> ·
   <a href="#-acknowledgements">Acknowledgements</a>
@@ -35,10 +36,12 @@
 | 🧩 | **The one skill** the prompt needs, if any | at the start of each turn |
 | 📊 | **A record of every decision**, with tuning suggestions | always, via `/jev-pilot:report` |
 
+Jev never writes in your conversation. It talks through **Clawd the pilot**, a small animated pet above the prompt that shows what Claude is doing and says what Jev decided.
+
 <p align="center">
-  <img src="assets/demo.svg" alt="An illustrative claude-jev session: a rename runs at low effort; a failing-tests prompt starts at xhigh effort with the systematic-debugging skill attached and is raised to max after two failed tool calls; /jev-pilot:report summarises the decisions." width="860">
+  <img src="assets/demo.svg" alt="An illustrative claude-jev session. A rename runs at low effort, and the pet's bubble says low, no skill, 99% sure. A failing-tests prompt starts at xhigh with the systematic-debugging skill: the pet reads, searches and runs the tests; after two failures the effort is raised to max; it writes the fix, the tests pass, and it jumps rope." width="860">
   <br>
-  <sub>An illustrative session. The log lines follow jev-pilot's real format; the numbers are examples.</sub>
+  <sub>An illustrative session: the pet and its bubbles are drawn from the plugin's own code; the numbers are examples.</sub>
 </p>
 
 > [!NOTE]
@@ -104,22 +107,9 @@ This loads the clone with `--plugin-dir`, so your edits take effect in the next 
 
 ### Check it's working
 
-Your first prompt logs:
+Start `claude-jev` and look above the prompt, at the right: Clawd appears with a bubble saying `ready · openrouter`. After your first prompt the bubble says what Jev decided, such as `low · no skill · 99% sure`.
 
-```
-[jev-model-router] ready on openrouter (https://openrouter.ai/api/v1/systemone); routing subagent model, main effort
-[jev-skill-suggestion] ready on openrouter (…); withholding the skill listing
-```
-
-and each prompt after that shows what Jev decided:
-
-```
-[jev-model-router] jev: tier fast (0.99) · effort 0.2 → low (0.86) · risky 0.03 · strategy direct (0.99) · 566ms
-[jev-model-router] main loop → effort low: fast (confidence 0.99)
-[jev-skill-suggestion] suggesting /systematic-debugging: rerank of 3, fits 0.50
-```
-
-`no key set` means the key isn't being read. Run the installer again.
+If it says `ready · no key, built-in`, the key isn't being read. Run the installer again. To see every step Jev takes, turn on `verboseLog` (see [Configuration](#%EF%B8%8F-configuration)).
 
 ### Update and uninstall
 
@@ -183,6 +173,47 @@ Advice is attached only when Jev is confident (0.6, or 0.8 for `graph`) and it a
 
 The winner's `SKILL.md` is added to the prompt. `/jev-pilot:setup` can hide your own skills from Claude's skill list entirely (it asks first; `restore` undoes it).
 
+## 🛩️ Meet the pilot
+
+<p align="center">
+  <img src="assets/pet.svg" alt="Clawd the pilot above the Claude Code prompt: thinking with a thought cloud, reading a book, searching with a magnifying glass, running tests in a terminal, flying when the effort is raised, writing on paper, then jumping rope and waving while idle." width="860">
+</p>
+
+Clawd, Claude Code's character, sits above the prompt at the right and shows what Claude is doing:
+
+| Claude is… | Clawd | Its bubble |
+|---|---|---|
+| thinking | a thought cloud, `...` filling in | `⠋ thinking · …` |
+| reading files or pages | an open book, the line being read lit up | `⠋ reading · …` |
+| searching (Grep, Glob, web) | a magnifying glass, sweeping | `⠋ searching · …` |
+| editing files or writing the answer | paper, a pencil writing lines | `⠋ writing · …` |
+| running commands | a terminal, output scrolling | `⠋ running · …` |
+| running subagents or other tools | flying: goggles down, jets on | `⠋ working · …` |
+| idle | hovering and blinking; every few seconds it jumps rope, waves or looks around | Jev's last decision |
+
+**The bubble** says the turn's effort, the skill attached (or `no skill`), any strategy advice, and **how sure Jev was of the effort**: `xhigh · /systematic-debugging · parallel · 88% sure`. When Jev wanted a change but wasn't sure enough to make it, it says so: `high kept · wanted low · 42% sure`. A mid-turn raise shows as `2 fails → max ✈`, and a subagent's model as `Explore → haiku`.
+
+It draws only in the terminal (not in `claude -p`, the desktop app or mobile), and redraws only while something moves. `/jev pet off` hides it.
+
+### Switch any part on or off
+
+Everything is on by default except switching the main conversation's model. Type `/jev` to see the switches, and change them live:
+
+```
+/jev                    what is on
+/jev skills off         one switch: effort · raise · subagents · skills · strategy · model · pet
+/jev all off            every switch (all on turns them back on)
+/jev reset              back to your settings' defaults
+```
+
+Switches are remembered across sessions. `/jev skills off` leaves skills exactly as Claude Code handles them.
+
+### How sure is Jev?
+
+- **The bubble:** the `N% sure` at the end, for each turn.
+- **A line per turn in the conversation:** set `display` to `both` or `transcript`, and each turn gets one line, such as `jev · low (93% sure) · no skill · 1.3s`.
+- **Every raw score:** turn on `verboseLog` to see each answer with its confidence, such as `tier fast (0.99) · effort 0.0 → low (1.00) · risky 0.10 · strategy direct (1.00)` and `needs a skill 0.09`.
+
 ## 📊 See if it's paying off
 
 Every main-conversation turn is recorded: what Jev answered, the effort the turn started at, whether it was raised, tool calls, failures, how it ended, and output tokens. **No prompt text is ever stored.** After a few days, run `/jev-pilot:report` in a session:
@@ -204,7 +235,7 @@ After 20 or more turns, it suggests specific changes, such as a longer `timeoutM
 
 ## ⚙️ Configuration
 
-Every option has a sensible default. On a marketplace install, change options with `/plugin configure jev-pilot@jev-pilot` in Claude Code. On a clone install, edit `pluginConfigs["jev-pilot"].options` in `~/.claude/settings.json`.
+Every option has a sensible default. On a marketplace install, change options with `/plugin configure jev-pilot@jev-pilot` in Claude Code. On a clone install, edit `pluginConfigs["jev-pilot"].options` in `~/.claude/settings.json`. The on/off options are also switches you can flip live with [`/jev`](#switch-any-part-on-or-off).
 
 <details>
 <summary><b>Most-used options</b></summary>
@@ -225,6 +256,10 @@ Every option has a sensible default. On a marketplace install, change options wi
 | `graphSkill` | — | a heavier orchestration skill the `graph` advice may mention |
 | `contextMessages` / `contextChars` | 4 / 2000 | how much of the conversation Jev reads; 0 sends none |
 | `recordDecisions` | true | keep the decision record for `/jev-pilot:report` |
+| `display` | `pet` | where jev-pilot talks: `pet`, `transcript` (one line per turn), `both`, or `off` |
+| `verboseLog` | false | log every step: each answer with its confidence, the skill ranking, and why a turn was left alone |
+| `suggestSkills` | true | pick one skill per prompt; off leaves skills as Claude Code handles them |
+| `logDecisions` | true | master switch for jev-pilot's messages in the conversation (errors always show) |
 
 All options are listed, with descriptions, in [`.claude-plugin/plugin.json`](.claude-plugin/plugin.json).
 
@@ -281,17 +316,22 @@ claude plugin validate .claude-plugin/plugin.json          # manifest and hook-r
 .claude-plugin/marketplace.json   makes the repo installable with `claude plugin install`
 install.sh                        the installer
 bin/claude-jev                    launcher and self-update
-hooks/jev-pilot.ts                the one hooks module: registers both below
+hooks/jev-pilot.ts                the one hooks module: registers the rest
 hooks/jev-model-router.ts         effort, subagent model, strategy, mid-turn raise, ledger
 hooks/model-router.policy.ts        its pure decision logic
 hooks/jev-skill-suggestion.ts     skill listing and the one-skill pick
 hooks/skill-suggestion.policy.ts    its pure decision logic
 hooks/context.ts                  what Jev reads of the conversation, and the request's signals
 hooks/ledger.ts                   the decision record, the report and its suggestions
+hooks/jev-pet.tsx                 the pet above the prompt, and the /jev command
+hooks/pet-art.ts                  Clawd's pixel art: every pose, prop and frame, and the bubble's text
+hooks/features.ts                 the switches /jev flips
+hooks/summary.ts                  the one line per turn, for display transcript/both
 commands/                         /jev-pilot:setup, /jev-pilot:report
 docs/                             the original modules' documentation
-assets/                           banner and demo (animated SVG, CSS only), social preview card
-scripts/assets/                   generate them: banner.py, demo.py, social.py
+assets/                           banner, demo and pet (animated SVG, CSS only), social preview card
+scripts/assets/                   generate them: banner.py, demo.py, pet.py, social.py; the pet is
+                                  drawn from hooks/pet-art.ts (frames.ts, petsvg.py)
 ```
 
 The engine tests load the plugin without options, so they cover the keyless path. The keyed path is covered by the unit tests, and was checked live against OpenRouter.
@@ -327,9 +367,10 @@ Their routing policy, the two-step skill suggestion and the setup command come f
 - recent context and request signals;
 - the decision ledger and report;
 - batched skill ranking;
+- the pet and the `/jev` switches;
 - the installer and `claude-jev`.
 
-Decisions are made by [**Jev**](https://typesafe.ai/blog/introducing-system-one-models-and-jev), [TypeSafe](https://typesafe.ai)'s System One model. The pilot in the banner is fan art of Clawd, Claude Code's character. Claude and Claude Code are trademarks of Anthropic. jev-pilot is a community project, not affiliated with TypeSafe or Anthropic.
+Decisions are made by [**Jev**](https://typesafe.ai/blog/introducing-system-one-models-and-jev), [TypeSafe](https://typesafe.ai)'s System One model. The pilot in the banner and the pet is fan art of Clawd, Claude Code's character. Claude and Claude Code are trademarks of Anthropic. jev-pilot is a community project, not affiliated with TypeSafe or Anthropic.
 
 ## 📄 License
 
