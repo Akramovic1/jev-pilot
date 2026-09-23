@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.4 — 2026-09-23
+
+- **Claude Code's overload fallback now stands.** With `routeMainModel` on, every later request of a turn was sent with the routed model. When that model was overloaded, Claude Code's `--fallback-model` retry was sent straight back to it, and the turn failed on 529s. A later request that names a model other than the one the engine named for the turn's first request is now taken as the engine's own move: the routed model is dropped for the rest of the turn, and the routed effort still applies. Reported on claude-code-templates#975 by @meesp123, ported from their fix for jev-model-router (#977). `routeMainModel` is off by default.
+
 ## 0.4.3 — 2026-09-23
 
 **Claude the pilot.** jev-pilot no longer writes in the conversation. It talks through a pet above the prompt, at the right: Claude the pilot, drawn as Claude Code's character in the banner's pilot gear.

@@ -251,7 +251,7 @@ Every option has a sensible default. On a marketplace install, change options wi
 | `escalateAfterErrors` | 2 | failed tool calls in a row before a raise; 0 turns raising off |
 | `effortCloseMargin` | 0.15 | how close two levels must be for the higher to win |
 | `fastModel` / `balancedModel` / `deepModel` | `haiku` / `sonnet` / `opus` | subagent tiers: family names or full ids |
-| `routeMainModel` | false | also switch the main conversation's model (invalidates the prompt cache) |
+| `routeMainModel` | false | also switch the main conversation's model (invalidates the prompt cache); if Claude Code falls back to another model mid-turn (overload), the fallback stands |
 | `suggestStrategy` | true | ask for and attach strategy advice |
 | `graphSkill` | — | a heavier orchestration skill the `graph` advice may mention |
 | `contextMessages` / `contextChars` | 4 / 2000 | how much of the conversation Jev reads; 0 sends none |
