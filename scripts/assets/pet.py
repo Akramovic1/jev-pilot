@@ -3,7 +3,7 @@ Claude does (thinking, reading, searching, running, writing), then playing while
 from html import escape
 from petsvg import MONO, Timeline, keys, pet_band, ROOT
 
-W, H = 860, 250
+W, H = 860, 224
 T = 21.0
 tl = Timeline(T, 'p')
 # (start, end, frames, period, bubble, mood, working, transcript line, its color)
@@ -23,7 +23,7 @@ band = pet_band(tl, [s[:7] for s in story], right=W - 40, top=BAND_TOP)
 captions = ''.join(
     f'<text class="{tl.span(a, b)}" x="30" y="30" fill="{color}" xml:space="preserve">{escape(line)}</text>'
     for a, b, *_rest, line, color in story if line)
-PROMPT = BAND_TOP + 12 * 6 + 22
+PROMPT = BAND_TOP + 10 * 6 + 22
 svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox="0 0 {W} {H}" role="img" aria-labelledby="ptitle pdesc">
   <title id="ptitle">Claude the pilot, jev-pilot's pet</title>
   <desc id="pdesc">Above the Claude Code prompt, the pilot shows what Claude is doing and its bubble says what Jev decided: thinking, reading a file, searching, running tests, flying when the effort is raised to max after two failures, writing the fix, then jumping rope and waving while idle.</desc>

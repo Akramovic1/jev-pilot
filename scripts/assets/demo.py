@@ -67,7 +67,7 @@ for i, (kind, start, text, color) in enumerate(lines):
 
 BAND = y + 10
 band = pet_band(tl, pet, right=W - 36, top=BAND, px=5, font=14)
-PROMPT = BAND + 12 * 5 + 18
+PROMPT = BAND + 10 * 5 + 18
 H = PROMPT + 84
 svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox="0 0 {W} {H}" role="img" aria-labelledby="dtitle ddesc" font-family="{MONO}" font-size="14">
   <title id="dtitle">jev-pilot in a Claude Code session</title>
