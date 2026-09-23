@@ -274,5 +274,6 @@ fi
 
 printf '\n%sDone.%s Start Claude Code with Jev:\n\n' "$green$bold" "$reset"
 printf '    %sclaude-jev%s            (same arguments as claude: claude-jev -c, claude-jev -p "…")\n\n' "$bold" "$reset"
-printf '  Your first prompt logs "[jev-model-router] ready on openrouter". Update any time with\n'
-printf '  %sclaude-jev self-update%s. After a few days, run %s/jev-pilot:report%s in a session.\n\n' "$bold" "$reset" "$bold" "$reset"
+printf '  Look above the prompt, at the right: Clawd the pilot says "ready", then\n'
+printf '  what Jev decides for each prompt. %s/jev%s switches any part on or off.\n' "$bold" "$reset"
+printf '  Update any time with %sclaude-jev self-update%s. After a few days, run %s/jev-pilot:report%s.\n\n' "$bold" "$reset" "$bold" "$reset"
