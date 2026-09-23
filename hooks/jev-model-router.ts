@@ -58,7 +58,7 @@
 import type { HttpInit, HttpResponse, Register } from 'claude-code'
 import { NOT_A_TASK, recentContext, signalsOf } from './context.ts'
 import { clearSkillNotes, resetBriefing, takeBriefing, takeSkill, turnLine } from './summary.ts'
-import { moodOf, say, turnSpeech } from './pet-art.ts'
+import { moodOf, say, setBoost, turnSpeech } from './pet-art.ts'
 import { feature } from './features.ts'
 import type { ContextMessage } from './context.ts'
 import { appendEntry, configKeysOf, entriesOf, LEDGER_KEY, reportPrompt, suggestions, summarize } from './ledger.ts'
@@ -522,6 +522,8 @@ export const register: Register = (on, options) => {
               $.ui.status(`jev · struggling → ${raised}`)
             }
             if (petOn()) {
+              // At max, the pilot pulls its goggles down for the rest of the turn.
+              if (raised === 'max') setBoost(true)
               say(`${failed} fails → ${raised} ✈`, raised === 'max' ? 'boost' : moodOf(raised))
               $.ui.invalidate('ui.render')
             }

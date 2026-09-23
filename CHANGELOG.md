@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.8 — 2026-09-24
+
+- **Goggles down while subagents work.** With subagents still running in the background after a turn, the pilot cruises, goggles down, at a calm redraw rate, until they're all done. The engine's own list of agents is checked every 1.5 s, so a stopped or failed agent never leaves it flying.
+- **Goggles down at max.** When the effort is raised to max mid-turn, the goggles stay down for the rest of the turn, whatever the pilot is holding.
+- **Cleaner flight.** The strap is head-width, and the speed streaks at the sides are gone (they read as loose pieces of the goggles).
+
 ## 0.4.7 — 2026-09-24
 
 - **Subagent effort.** Each subagent now gets a reasoning effort as well as a model, from the same decision, with the same rubric and confidence bars as the main conversation. The Agent tool takes no effort, so jev-pilot sets it on every request the subagent makes. Models without an effort setting are left alone. Option `routeSubagentEffort` (on by default), under the `/jev subagents` switch.
