@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="860" height="468" viewBox="0 0 860 468" role="img" aria-labelledby="dtitle ddesc" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="14">
+  <title id="dtitle">jev-pilot in a Claude Code session</title>
+  <desc id="ddesc">An illustrative session: a rename runs at low effort; a failing-tests prompt runs at high effort with the systematic-debugging skill attached, and is raised to xhigh after two failed tool calls; /jev-pilot:report summarises the decisions.</desc>
+  <style>
+    .l0 { animation: l0 18.0s linear infinite; opacity: 0; }
+    @keyframes l0 { 0%, 2.22% { opacity: 0; } 2.28%, 93.89% { opacity: 1; } 97.78%, 100% { opacity: 0; } }
+    .c0 { animation: c0 18.0s steps(12, end) infinite; }
+    @keyframes c0 { 0%, 2.22% { transform: translateX(0); } 5.00%, 100% { transform: translateX(113px); } }
+    .l1 { animation: l1 18.0s linear infinite; opacity: 0; }
+    @keyframes l1 { 0%, 7.78% { opacity: 0; } 9.44%, 93.89% { opacity: 1; } 97.78%, 100% { opacity: 0; } }
+    .l3 { animation: l3 18.0s linear infinite; opacity: 0; }
+    @keyframes l3 { 0%, 12.78% { opacity: 0; } 12.83%, 93.89% { opacity: 1; } 97.78%, 100% { opacity: 0; } }
+    .c3 { animation: c3 18.0s steps(49, end) infinite; }
+    @keyframes c3 { 0%, 12.78% { transform: translateX(0); } 20.94%, 100% { transform: translateX(426px); } }
+    .l4 { animation: l4 18.0s linear infinite; opacity: 0; }
+    @keyframes l4 { 0%, 22.78% { opacity: 0; } 24.44%, 93.89% { opacity: 1; } 97.78%, 100% { opacity: 0; } }
+    .l5 { animation: l5 18.0s linear infinite; opacity: 0; }
+    @keyframes l5 { 0%, 26.11% { opacity: 0; } 27.78%, 93.89% { opacity: 1; } 97.78%, 100% { opacity: 0; } }
+    .l7 { animation: l7 18.0s linear infinite; opacity: 0; }
+    @keyframes l7 { 0%, 32.22% { opacity: 0; } 32.28%, 93.89% { opacity: 1; } 97.78%, 100% { opacity: 0; } }
+    .c7 { animation: c7 18.0s steps(61, end) infinite; }
+    @keyframes c7 { 0%, 32.22% { transform: translateX(0); } 42.39%, 100% { transform: translateX(527px); } }
+    .l8 { animation: l8 18.0s linear infinite; opacity: 0; }
+    @keyframes l8 { 0%, 44.44% { opacity: 0; } 46.11%, 93.89% { opacity: 1; } 97.78%, 100% { opacity: 0; } }
+    .l9 { animation: l9 18.0s linear infinite; opacity: 0; }
+    @keyframes l9 { 0%, 47.78% { opacity: 0; } 49.44%, 93.89% { opacity: 1; } 97.78%, 100% { opacity: 0; } }
+    .l10 { animation: l10 18.0s linear infinite; opacity: 0; }
+    @keyframes l10 { 0%, 53.33% { opacity: 0; } 55.00%, 93.89% { opacity: 1; } 97.78%, 100% { opacity: 0; } }
+    .l11 { animation: l11 18.0s linear infinite; opacity: 0; }
+    @keyframes l11 { 0%, 56.67% { opacity: 0; } 58.33%, 93.89% { opacity: 1; } 97.78%, 100% { opacity: 0; } }
+    .l13 { animation: l13 18.0s linear infinite; opacity: 0; }
+    @keyframes l13 { 0%, 63.33% { opacity: 0; } 63.39%, 93.89% { opacity: 1; } 97.78%, 100% { opacity: 0; } }
+    .c13 { animation: c13 18.0s steps(19, end) infinite; }
+    @keyframes c13 { 0%, 63.33% { transform: translateX(0); } 66.50%, 100% { transform: translateX(173px); } }
+    .l14 { animation: l14 18.0s linear infinite; opacity: 0; }
+    @keyframes l14 { 0%, 70.00% { opacity: 0; } 71.67%, 93.89% { opacity: 1; } 97.78%, 100% { opacity: 0; } }
+    .l15 { animation: l15 18.0s linear infinite; opacity: 0; }
+    @keyframes l15 { 0%, 72.78% { opacity: 0; } 74.44%, 93.89% { opacity: 1; } 97.78%, 100% { opacity: 0; } }
+    .cursor { animation: blink 1s steps(2, start) infinite; }
+    @keyframes blink { to { visibility: hidden; } }
+    @media (prefers-reduced-motion: reduce) {
+      .line { animation: none !important; opacity: 1 !important; }
+      .cover { display: none; }
+      .cursor { animation: none !important; }
+    }
+  </style>
+  <rect width="860" height="468" rx="14" fill="#0d1117" stroke="#30363d"/>
+  <rect width="860" height="40" rx="14" fill="#161b22"/>
+  <rect y="26" width="860" height="14" fill="#161b22"/>
+  <line x1="0" y1="40" x2="860" y2="40" stroke="#30363d"/>
+  <circle cx="24" cy="20" r="6" fill="#ff5f57"/><circle cx="44" cy="20" r="6" fill="#febc2e"/><circle cx="64" cy="20" r="6" fill="#28c840"/>
+  <text x="430.0" y="25" text-anchor="middle" fill="#8b949e" font-size="13">claude-jev · jev-pilot</text>
+  <defs><clipPath id="screen"><rect x="1" y="41" width="858" height="426" rx="13"/></clipPath></defs>
+  <g clip-path="url(#screen)">
+    <text class="line l0" x="28" y="78" fill="#e6edf3" xml:space="preserve">$ claude-jev</text>
+  <rect class="cover c0" x="26" y="61" width="113" height="24" fill="#0d1117"/>
+  <text class="line l1" x="28" y="102" fill="#8d99b8" xml:space="preserve">  jev-pilot ready on openrouter · effort · subagents · skills</text>
+  <text class="line l3" x="28" y="138" fill="#e6edf3" xml:space="preserve">&gt; rename userCount to activeUsers in src/stats.ts</text>
+  <rect class="cover c3" x="26" y="121" width="426" height="24" fill="#0d1117"/>
+  <text class="line l4" x="28" y="162" fill="#7cf0c4" xml:space="preserve">  jev   tier fast 0.99 · effort low · strategy direct · 566 ms</text>
+  <text class="line l5" x="28" y="186" fill="#d4ff4f" xml:space="preserve">  →     effort low</text>
+  <text class="line l7" x="28" y="222" fill="#e6edf3" xml:space="preserve">&gt; the checkout tests fail since the merge and I can&#x27;t see why</text>
+  <rect class="cover c7" x="26" y="205" width="527" height="24" fill="#0d1117"/>
+  <text class="line l8" x="28" y="246" fill="#7cf0c4" xml:space="preserve">  jev   tier deep 1.00 · effort high · 612 ms</text>
+  <text class="line l9" x="28" y="270" fill="#c9d2ea" xml:space="preserve">  skill /systematic-debugging attached (fits 0.50)</text>
+  <text class="line l10" x="28" y="294" fill="#ff8f8f" xml:space="preserve">  ✗     2 tool calls failed in a row</text>
+  <text class="line l11" x="28" y="318" fill="#d4ff4f" xml:space="preserve">  →     effort raised high → xhigh</text>
+  <text class="line l13" x="28" y="354" fill="#e6edf3" xml:space="preserve">&gt; /jev-pilot:report</text>
+  <rect class="cover c13" x="26" y="337" width="173" height="24" fill="#0d1117"/>
+  <text class="line l14" x="28" y="378" fill="#c9d2ea" xml:space="preserve">  142 turns · Jev answered 97% · median 540 ms</text>
+  <text class="line l15" x="28" y="402" fill="#c9d2ea" xml:space="preserve">  started low 61 · medium 38 · xhigh 29 · raised 3% · 8% · 17%</text>
+  </g>
+  <text x="28" y="438" fill="#e6edf3">&gt; <tspan class="cursor" fill="#d4ff4f">▍</tspan></text>
+</svg>

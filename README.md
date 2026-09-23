@@ -35,6 +35,12 @@
 | 🧩 | **The one skill** the prompt needs, if any | at the start of each turn |
 | 📊 | **A record of every decision**, with tuning suggestions | always, via `/jev-pilot:report` |
 
+<p align="center">
+  <img src="assets/demo.svg" alt="An illustrative claude-jev session: a rename runs at low effort; a failing-tests prompt runs at high effort with the systematic-debugging skill attached and is raised to xhigh after two failed tool calls; /jev-pilot:report summarises the decisions." width="860">
+  <br>
+  <sub>An illustrative session. The log lines follow jev-pilot's real format; the numbers are examples.</sub>
+</p>
+
 > [!NOTE]
 > jev-pilot runs on Claude Code's **function hooks**, which are early access: they need Claude Code **2.1.278 or newer** and `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1`. The `claude-jev` launcher sets that for you.
 
@@ -284,6 +290,8 @@ hooks/context.ts                  what Jev reads of the conversation, and the re
 hooks/ledger.ts                   the decision record, the report and its suggestions
 commands/                         /jev-pilot:setup, /jev-pilot:report
 docs/                             the original modules' documentation
+assets/                           banner and demo (animated SVG, CSS only)
+scripts/assets/                   generate them: python3 scripts/assets/banner.py
 ```
 
 The engine tests load the plugin without options, so they cover the keyless path. The keyed path is covered by the unit tests, and was checked live against OpenRouter.
@@ -321,7 +329,7 @@ Their routing policy, the two-step skill suggestion and the setup command come f
 - batched skill ranking;
 - the installer and `claude-jev`.
 
-Decisions are made by [**Jev**](https://typesafe.ai/blog/introducing-system-one-models-and-jev), [TypeSafe](https://typesafe.ai)'s System One model. jev-pilot is a community project, not affiliated with TypeSafe or Anthropic.
+Decisions are made by [**Jev**](https://typesafe.ai/blog/introducing-system-one-models-and-jev), [TypeSafe](https://typesafe.ai)'s System One model. The pilot in the banner is fan art of Clawd, Claude Code's character. Claude and Claude Code are trademarks of Anthropic. jev-pilot is a community project, not affiliated with TypeSafe or Anthropic.
 
 ## 📄 License
 
