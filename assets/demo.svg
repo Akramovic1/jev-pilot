@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="860" height="468" viewBox="0 0 860 468" role="img" aria-labelledby="dtitle ddesc" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="14">
   <title id="dtitle">jev-pilot in a Claude Code session</title>
-  <desc id="ddesc">An illustrative session: a rename runs at low effort; a failing-tests prompt runs at high effort with the systematic-debugging skill attached, and is raised to xhigh after two failed tool calls; /jev-pilot:report summarises the decisions.</desc>
+  <desc id="ddesc">An illustrative session: a rename runs at low effort; a failing-tests prompt starts at xhigh effort with the systematic-debugging skill attached, and is raised to max after two failed tool calls; /jev-pilot:report summarises the decisions.</desc>
   <style>
     .l0 { animation: l0 18.0s linear infinite; opacity: 0; }
     @keyframes l0 { 0%, 2.22% { opacity: 0; } 2.28%, 93.89% { opacity: 1; } 97.78%, 100% { opacity: 0; } }
@@ -61,10 +61,10 @@
   <text class="line l5" x="28" y="186" fill="#d4ff4f" xml:space="preserve">  →     effort low</text>
   <text class="line l7" x="28" y="222" fill="#e6edf3" xml:space="preserve">&gt; the checkout tests fail since the merge and I can&#x27;t see why</text>
   <rect class="cover c7" x="26" y="205" width="527" height="24" fill="#0d1117"/>
-  <text class="line l8" x="28" y="246" fill="#7cf0c4" xml:space="preserve">  jev   tier deep 1.00 · effort high · 612 ms</text>
+  <text class="line l8" x="28" y="246" fill="#7cf0c4" xml:space="preserve">  jev   tier deep 1.00 · effort xhigh · 612 ms</text>
   <text class="line l9" x="28" y="270" fill="#c9d2ea" xml:space="preserve">  skill /systematic-debugging attached (fits 0.50)</text>
   <text class="line l10" x="28" y="294" fill="#ff8f8f" xml:space="preserve">  ✗     2 tool calls failed in a row</text>
-  <text class="line l11" x="28" y="318" fill="#d4ff4f" xml:space="preserve">  →     effort raised high → xhigh</text>
+  <text class="line l11" x="28" y="318" fill="#d4ff4f" xml:space="preserve">  →     effort raised xhigh → max</text>
   <text class="line l13" x="28" y="354" fill="#e6edf3" xml:space="preserve">&gt; /jev-pilot:report</text>
   <rect class="cover c13" x="26" y="337" width="173" height="24" fill="#0d1117"/>
   <text class="line l14" x="28" y="378" fill="#c9d2ea" xml:space="preserve">  142 turns · Jev answered 97% · median 540 ms</text>

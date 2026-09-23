@@ -36,7 +36,7 @@
 | 📊 | **A record of every decision**, with tuning suggestions | always, via `/jev-pilot:report` |
 
 <p align="center">
-  <img src="assets/demo.svg" alt="An illustrative claude-jev session: a rename runs at low effort; a failing-tests prompt runs at high effort with the systematic-debugging skill attached and is raised to xhigh after two failed tool calls; /jev-pilot:report summarises the decisions." width="860">
+  <img src="assets/demo.svg" alt="An illustrative claude-jev session: a rename runs at low effort; a failing-tests prompt starts at xhigh effort with the systematic-debugging skill attached and is raised to max after two failed tool calls; /jev-pilot:report summarises the decisions." width="860">
   <br>
   <sub>An illustrative session. The log lines follow jev-pilot's real format; the numbers are examples.</sub>
 </p>

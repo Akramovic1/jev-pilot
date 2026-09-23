@@ -22,10 +22,10 @@ lines = [  # (kind, start, text, color)  kind: type (typed) | out (fades in) | g
     ('out', 4.7, '  →     effort low', '#d4ff4f'),
     ('gap', 0, '', ''),
     ('type', 5.8, "> the checkout tests fail since the merge and I can't see why", '#e6edf3'),
-    ('out', 8.0, '  jev   tier deep 1.00 · effort high · 612 ms', '#7cf0c4'),
+    ('out', 8.0, '  jev   tier deep 1.00 · effort xhigh · 612 ms', '#7cf0c4'),
     ('out', 8.6, '  skill /systematic-debugging attached (fits 0.50)', '#c9d2ea'),
     ('out', 9.6, '  ✗     2 tool calls failed in a row', '#ff8f8f'),
-    ('out', 10.2, '  →     effort raised high → xhigh', '#d4ff4f'),
+    ('out', 10.2, '  →     effort raised xhigh → max', '#d4ff4f'),
     ('gap', 0, '', ''),
     ('type', 11.4, '> /jev-pilot:report', '#e6edf3'),
     ('out', 12.6, '  142 turns · Jev answered 97% · median 540 ms', '#c9d2ea'),
@@ -54,7 +54,7 @@ css.append(f"    .cursor {{ animation: blink 1s steps(2, start) infinite; }}\n  
 H = cursor_y + 30
 demo = f'''<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox="0 0 {W} {H}" role="img" aria-labelledby="dtitle ddesc" font-family="{MONO}" font-size="14">
   <title id="dtitle">jev-pilot in a Claude Code session</title>
-  <desc id="ddesc">An illustrative session: a rename runs at low effort; a failing-tests prompt runs at high effort with the systematic-debugging skill attached, and is raised to xhigh after two failed tool calls; /jev-pilot:report summarises the decisions.</desc>
+  <desc id="ddesc">An illustrative session: a rename runs at low effort; a failing-tests prompt starts at xhigh effort with the systematic-debugging skill attached, and is raised to max after two failed tool calls; /jev-pilot:report summarises the decisions.</desc>
   <style>
 {chr(10).join(css)}
     @media (prefers-reduced-motion: reduce) {{
