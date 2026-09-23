@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# claude-jev — Claude Code with the jev-pilot plugin loaded: Jev decides the
+# reasoning effort, subagent models, strategy and skill for each prompt.
+#
+# Every argument is passed through to `claude` (`claude-jev -c`, `claude-jev -p "..."`).
+# Link it onto your PATH: ln -s "$PWD/bin/claude-jev" ~/.local/bin/claude-jev
+set -euo pipefail
+
+# The plugin is the folder above this script, found through any symlinks
+# (portable: no `readlink -f`, which older macOS lacks).
+source="${BASH_SOURCE[0]}"
+while [[ -L "$source" ]]; do
+  dir="$(cd -P "$(dirname "$source")" && pwd)"
+  source="$(readlink "$source")"
+  [[ "$source" != /* ]] && source="$dir/$source"
+done
+plugin_dir="${JEV_PILOT_DIR:-$(cd -P "$(dirname "$source")/.." && pwd)}"
+
+if [[ ! -f "$plugin_dir/.claude-plugin/plugin.json" ]]; then
+  echo "claude-jev: no jev-pilot plugin at $plugin_dir (set JEV_PILOT_DIR)" >&2
+  exit 1
+fi
+if ! command -v claude >/dev/null 2>&1; then
+  echo "claude-jev: Claude Code (claude) is not on your PATH" >&2
+  exit 1
+fi
+
+export CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1
+exec claude --plugin-dir "$plugin_dir" "$@"
