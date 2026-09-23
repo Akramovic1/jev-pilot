@@ -16,3 +16,4 @@ First public release as **jev-pilot**.
 - **One-line install**: `install.sh` installs jev-pilot as a regular Claude Code plugin (marketplace + `claude plugin install`, with the key in Claude Code's credential store), or links a clone for development. It's safe to re-run, and supports `--uninstall`.
 - **`claude-jev`** launcher, which works with either install, plus `claude-jev self-update`. On clone installs, it checks for updates once a day in the background.
 - The repo is its own plugin marketplace (`.claude-plugin/marketplace.json`).
+- README with an animated banner (Clawd, Claude Code's character, as a pilot flying at the effort Jev picks), an animated terminal demo, and a social preview card. The generators are in `scripts/assets/`.

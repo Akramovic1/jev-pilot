@@ -290,8 +290,8 @@ hooks/context.ts                  what Jev reads of the conversation, and the re
 hooks/ledger.ts                   the decision record, the report and its suggestions
 commands/                         /jev-pilot:setup, /jev-pilot:report
 docs/                             the original modules' documentation
-assets/                           banner and demo (animated SVG, CSS only)
-scripts/assets/                   generate them: python3 scripts/assets/banner.py
+assets/                           banner and demo (animated SVG, CSS only), social preview card
+scripts/assets/                   generate them: banner.py, demo.py, social.py
 ```
 
 The engine tests load the plugin without options, so they cover the keyless path. The keyed path is covered by the unit tests, and was checked live against OpenRouter.
