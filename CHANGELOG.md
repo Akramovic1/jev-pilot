@@ -2,7 +2,7 @@
 
 ## 0.4.3 — 2026-09-23
 
-**Clawd the pilot.** jev-pilot no longer writes in the conversation. It talks through a pet above the prompt, at the right: Clawd, Claude Code's character, as the banner's pilot.
+**Claude the pilot.** jev-pilot no longer writes in the conversation. It talks through a pet above the prompt, at the right: Claude the pilot, drawn as Claude Code's character in the banner's pilot gear.
 
 - **It shows what Claude is doing.** Thinking (a thought cloud), reading (an open book), searching (a magnifying glass), writing (paper and a pencil), running commands (a terminal), subagents and other tools (flying, goggles down). Idle, it hovers and blinks, and every few seconds jumps rope, waves or looks around.
 - **Its bubble says what Jev decided**, with how sure Jev was, e.g. `⠋ reading · xhigh · /systematic-debugging · 88% sure`. A kept effort shows as `high kept · wanted low · 42% sure`, a mid-turn raise as `2 fails → max ✈`, a subagent's model as `Explore → haiku`.
@@ -45,4 +45,4 @@ First public release as **jev-pilot**.
 - **One-line install**: `install.sh` installs jev-pilot as a regular Claude Code plugin (marketplace + `claude plugin install`, with the key in Claude Code's credential store), or links a clone for development. It's safe to re-run, and supports `--uninstall`.
 - **`claude-jev`** launcher, which works with either install, plus `claude-jev self-update`. On clone installs, it checks for updates once a day in the background.
 - The repo is its own plugin marketplace (`.claude-plugin/marketplace.json`).
-- README with an animated banner (Clawd, Claude Code's character, as a pilot flying at the effort Jev picks), an animated terminal demo, and a social preview card. The generators are in `scripts/assets/`.
+- README with an animated banner (Claude Code's character as a pilot, flying at the effort Jev picks), an animated terminal demo, and a social preview card. The generators are in `scripts/assets/`.

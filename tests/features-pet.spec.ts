@@ -62,7 +62,7 @@ test('/jev lists every switch with its state', () => {
 
 const ACTS: Act[] = ['think', 'read', 'search', 'write', 'run', 'fly', 'rest', 'rope', 'wave', 'look']
 
-test('the pet is the pilot Clawd: goggles, eyes, scarf, flames; no flames while jumping rope', () => {
+test('the pet is Claude the pilot: goggles, eyes, scarf, flames; no flames while jumping rope', () => {
   const rest = scenePixels('rest').join('\n')
   expect(rest).toContain('LL') // goggle lenses
   expect(rest).toMatch(/E/) // open eyes
@@ -121,7 +121,7 @@ test('each act moves: its frames differ within a loop and repeat after it', () =
   }
 })
 
-test('jump rope: the rope goes overhead, then under Clawd while it is in the air', () => {
+test('jump rope: the rope goes overhead, then under the pilot while it is in the air', () => {
   const overhead = scenePixels('rope', 0)
   const under = scenePixels('rope', 2)
   expect(overhead[0]).toMatch(/R{5,}/)
@@ -144,12 +144,12 @@ test('each tool shows as what it does', () => {
   expect(actOfTool('mcp__github__create_issue')).toBe('fly')
 })
 
-test('the working poses hold something different beside Clawd: a book, a magnifier, paper, a terminal', () => {
+test('the working poses hold something different beside the pilot: a book, a magnifier, paper, a terminal', () => {
   expect(scenePixels('read', 0).join('')).toMatch(/B/)
   expect(scenePixels('search', 0).join('')).toMatch(/l/)
   expect(scenePixels('write', 3).join('')).toMatch(/P/)
   expect(scenePixels('run', 0).join('')).toMatch(/K/)
-  // Clawd itself stays whole: its part of the canvas is the resting Clawd's,
+  // The pilot itself stays whole: its part of the canvas is the resting pilot's,
   // bar the eyes (turned to the prop) and the arm that holds it.
   const body = (pixels: string[]) => pixels.map((row) => row.slice(0, BODY_W - 2).replace(/E/g, 'C')).join('\n')
   for (const act of ['read', 'search', 'write', 'run'] as Act[]) expect(body(scenePixels(act, 0))).toBe(body(scenePixels('rest', 0)))

@@ -1,10 +1,10 @@
 /**
- * jev-pet — Jev as a companion above the prompt, at the right: Clawd (Claude
- * Code's character) as a pilot, with a speech bubble saying what Jev just
+ * jev-pet — Jev as a companion above the prompt, at the right: Claude the
+ * pilot (Claude Code's character in pilot gear), with a speech bubble saying what Jev just
  * decided, so the decisions stay out of the conversation. It also owns
  * `/jev`, the switches for every part of jev-pilot.
  *
- * While a turn runs Clawd shows what Claude is doing, and the bubble says it
+ * While a turn runs the pilot shows what Claude is doing, and the bubble says it
  * beside a spinner: thinking (thought dots), reading (a book), searching (a
  * magnifier), writing (typing on a laptop), running a command (a terminal),
  * anything else (a subagent) flying. Idle, it hovers, its scarf's end
@@ -156,7 +156,7 @@ export const register: Register = (on) => {
     return { text: describeFeatures() }
   })
 
-  // While a turn runs, Clawd shows what Claude is doing: thinking first.
+  // While a turn runs, the pilot shows what Claude is doing: thinking first.
   on('turn.start', async ($, e, next) => {
     const result = await next(e)
     workingTurn = e.turnId

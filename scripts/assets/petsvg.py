@@ -1,4 +1,4 @@
-"""The pet in SVG: Clawd's pixel frames (from hooks/pet-art.ts via frames.ts) and its
+"""The pet in SVG: the pilot's pixel frames (from hooks/pet-art.ts via frames.ts) and its
 speech bubble, played on a CSS timeline. Shared by pet.py, demo.py and the launch video."""
 import json
 import subprocess
@@ -80,7 +80,7 @@ class Timeline:
         return self.cycle(uses, period)
 
 def pet_band(tl, segments, right, top, px=6, font=15):
-    """The band above the prompt: the bubble, then Clawd, right-aligned at `right`.
+    """The band above the prompt: the bubble, then the pilot, right-aligned at `right`.
     segments: (start, end, act frames [keys], frame period, bubble text, mood, working)."""
     d = data()
     sw, sh = d['width'] * px, d['height'] * px

@@ -8,7 +8,7 @@ SANS = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-se
 T = 12.0
 def pct(t): return f"{max(0, min(100, t / T * 100)):.2f}%"
 
-# ---- the mascot: Clawd, Claude Code's character (official 24x24 path), as a pilot
+# ---- the mascot: Claude Code's character (official 24x24 path), as a pilot
 S = 6.0                                   # 24 units -> 144 px
 CLAWD = ('M20.998 10.949H24v3.102h-3v3.028h-1.487V20H18v-2.921h-1.487V20H15v-2.921H9V20H7.488v-2.921H6V20H4.487'
          'v-2.921H3V14.05H0V10.95h3V5h17.998v5.949zM6 10.949h1.488V8.102H6v2.847zm10.51 0H18V8.102h-1.49v2.847z')
@@ -91,7 +91,7 @@ far, near = stars(38, 2, .35), stars(16, 3, .6)
 
 svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="320" viewBox="0 0 1280 320" role="img" aria-labelledby="title desc">
   <title id="title">jev-pilot</title>
-  <desc id="desc">Clawd, the Claude Code character, dressed as a pilot, flies at the height of the reasoning effort Jev picks: low for renaming a variable, xhigh for designing a job queue, max after two failed tool calls.</desc>
+  <desc id="desc">Claude Code's character, dressed as a pilot, flies at the height of the reasoning effort Jev picks: low for renaming a variable, xhigh for designing a job queue, max after two failed tool calls.</desc>
   <style>
     .far {{ animation: drift 60s linear infinite; }}
     .near {{ animation: drift 28s linear infinite; }}

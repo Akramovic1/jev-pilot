@@ -36,7 +36,7 @@
 | 🧩 | **The one skill** the prompt needs, if any | at the start of each turn |
 | 📊 | **A record of every decision**, with tuning suggestions | always, via `/jev-pilot:report` |
 
-Jev never writes in your conversation. It talks through **Clawd the pilot**, a small animated pet above the prompt that shows what Claude is doing and says what Jev decided.
+Jev never writes in your conversation. It talks through **Claude the pilot**, a small animated pet above the prompt that shows what Claude is doing and says what Jev decided.
 
 <p align="center">
   <img src="assets/demo.svg" alt="An illustrative claude-jev session. A rename runs at low effort, and the pet's bubble says low, no skill, 99% sure. A failing-tests prompt starts at xhigh with the systematic-debugging skill: the pet reads, searches and runs the tests; after two failures the effort is raised to max; it writes the fix, the tests pass, and it jumps rope." width="860">
@@ -107,7 +107,7 @@ This loads the clone with `--plugin-dir`, so your edits take effect in the next 
 
 ### Check it's working
 
-Start `claude-jev` and look above the prompt, at the right: Clawd appears with a bubble saying `ready · openrouter`. After your first prompt the bubble says what Jev decided, such as `low · no skill · 99% sure`.
+Start `claude-jev` and look above the prompt, at the right: the pilot appears with a bubble saying `ready · openrouter`. After your first prompt the bubble says what Jev decided, such as `low · no skill · 99% sure`.
 
 If it says `ready · no key, built-in`, the key isn't being read. Run the installer again. To see every step Jev takes, turn on `verboseLog` (see [Configuration](#%EF%B8%8F-configuration)).
 
@@ -176,12 +176,12 @@ The winner's `SKILL.md` is added to the prompt. `/jev-pilot:setup` can hide your
 ## 🛩️ Meet the pilot
 
 <p align="center">
-  <img src="assets/pet.svg" alt="Clawd the pilot above the Claude Code prompt: thinking with a thought cloud, reading a book, searching with a magnifying glass, running tests in a terminal, flying when the effort is raised, writing on paper, then jumping rope and waving while idle." width="860">
+  <img src="assets/pet.svg" alt="Claude the pilot above the Claude Code prompt: thinking with a thought cloud, reading a book, searching with a magnifying glass, running tests in a terminal, flying when the effort is raised, writing on paper, then jumping rope and waving while idle." width="860">
 </p>
 
-Clawd, Claude Code's character, sits above the prompt at the right and shows what Claude is doing:
+Claude the pilot, drawn as Claude Code's character, sits above the prompt at the right and shows what Claude is doing:
 
-| Claude is… | Clawd | Its bubble |
+| Claude is… | The pilot | Its bubble |
 |---|---|---|
 | thinking | a thought cloud, `...` filling in | `⠋ thinking · …` |
 | reading files or pages | an open book, the line being read lit up | `⠋ reading · …` |
@@ -324,7 +324,7 @@ hooks/skill-suggestion.policy.ts    its pure decision logic
 hooks/context.ts                  what Jev reads of the conversation, and the request's signals
 hooks/ledger.ts                   the decision record, the report and its suggestions
 hooks/jev-pet.tsx                 the pet above the prompt, and the /jev command
-hooks/pet-art.ts                  Clawd's pixel art: every pose, prop and frame, and the bubble's text
+hooks/pet-art.ts                  the pilot's pixel art: every pose, prop and frame, and the bubble's text
 hooks/features.ts                 the switches /jev flips
 hooks/summary.ts                  the one line per turn, for display transcript/both
 commands/                         /jev-pilot:setup, /jev-pilot:report
@@ -370,7 +370,7 @@ Their routing policy, the two-step skill suggestion and the setup command come f
 - the pet and the `/jev` switches;
 - the installer and `claude-jev`.
 
-Decisions are made by [**Jev**](https://typesafe.ai/blog/introducing-system-one-models-and-jev), [TypeSafe](https://typesafe.ai)'s System One model. The pilot in the banner and the pet is fan art of Clawd, Claude Code's character. Claude and Claude Code are trademarks of Anthropic. jev-pilot is a community project, not affiliated with TypeSafe or Anthropic.
+Decisions are made by [**Jev**](https://typesafe.ai/blog/introducing-system-one-models-and-jev), [TypeSafe](https://typesafe.ai)'s System One model. The pilot in the banner and the pet is fan art of Claude Code's character. Claude and Claude Code are trademarks of Anthropic. jev-pilot is a community project, not affiliated with TypeSafe or Anthropic.
 
 ## 📄 License
 

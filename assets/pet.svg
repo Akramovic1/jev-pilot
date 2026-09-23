@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="860" height="250" viewBox="0 0 860 250" role="img" aria-labelledby="ptitle pdesc">
-  <title id="ptitle">Clawd the pilot, jev-pilot's pet</title>
-  <desc id="pdesc">Above the Claude Code prompt, Clawd shows what Claude is doing and its bubble says what Jev decided: thinking, reading a file, searching, running tests, flying when the effort is raised to max after two failures, writing the fix, then jumping rope and waving while idle.</desc>
+  <title id="ptitle">Claude the pilot, jev-pilot's pet</title>
+  <desc id="pdesc">Above the Claude Code prompt, the pilot shows what Claude is doing and its bubble says what Jev decided: thinking, reading a file, searching, running tests, flying when the effort is raised to max after two failures, writing the fix, then jumping rope and waving while idle.</desc>
   <style>
         .ps1 { animation: ps1 21.0s steps(1, end) infinite; opacity: 0; } @keyframes ps1 { 0.000% { opacity: 1; } 9.524% { opacity: 0; } 100% { opacity: 0; } }
     @keyframes pcy4 { 0% { opacity: 1; } 25.000% { opacity: 0; } 100% { opacity: 0; } }

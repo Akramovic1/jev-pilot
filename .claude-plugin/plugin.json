@@ -222,7 +222,7 @@
     "display": {
       "type": "string",
       "title": "Where jev-pilot talks",
-      "description": "\"pet\": Clawd as a pilot above the prompt, showing what Claude is doing, with a speech bubble saying each decision (nothing in the conversation); \"transcript\": one line per turn in the conversation; \"both\"; or \"off\". /jev pet off hides the pet, and is remembered",
+      "description": "\"pet\": Claude the pilot above the prompt, showing what Claude is doing, with a speech bubble saying each decision (nothing in the conversation); \"transcript\": one line per turn in the conversation; \"both\"; or \"off\". /jev pet off hides the pet, and is remembered",
       "default": "pet",
       "options": [
         "pet",

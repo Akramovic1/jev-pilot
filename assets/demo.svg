@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="860" height="602" viewBox="0 0 860 602" role="img" aria-labelledby="dtitle ddesc" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="14">
   <title id="dtitle">jev-pilot in a Claude Code session</title>
-  <desc id="ddesc">An illustrative session. A rename runs at low effort: Clawd thinks, writes, and its bubble says low, no skill, 99% sure. A failing-tests prompt starts at xhigh effort with the systematic-debugging skill: Clawd reads, searches and runs the tests; after two failures the effort is raised to max and Clawd flies; it writes the fix, the tests pass, and it jumps rope. Jev never writes in the conversation.</desc>
+  <desc id="ddesc">An illustrative session. A rename runs at low effort: the pilot thinks, writes, and its bubble says low, no skill, 99% sure. A failing-tests prompt starts at xhigh effort with the systematic-debugging skill: the pilot reads, searches and runs the tests; after two failures the effort is raised to max and it flies; it writes the fix, the tests pass, and it jumps rope. Jev never writes in the conversation.</desc>
   <style>
         .l0 { animation: l0 24.0s linear infinite; opacity: 0; } @keyframes l0 { 0%, 1.667% { opacity: 0; } 1.708%, 95.833% { opacity: 1; } 98.750%, 100% { opacity: 0; } }
     .c0 { animation: c0 24.0s steps(49, end) infinite; } @keyframes c0 { 0%, 1.667% { transform: translateX(0); } 7.792%, 100% { transform: translateX(425px); } }

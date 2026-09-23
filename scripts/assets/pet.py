@@ -1,4 +1,4 @@
-"""Generates assets/pet.svg: Clawd the pilot above a Claude Code prompt, acting out what
+"""Generates assets/pet.svg: Claude the pilot above a Claude Code prompt, acting out what
 Claude does (thinking, reading, searching, running, writing), then playing while idle."""
 from html import escape
 from petsvg import MONO, Timeline, keys, pet_band, ROOT
@@ -25,8 +25,8 @@ captions = ''.join(
     for a, b, *_rest, line, color in story if line)
 PROMPT = BAND_TOP + 12 * 6 + 22
 svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox="0 0 {W} {H}" role="img" aria-labelledby="ptitle pdesc">
-  <title id="ptitle">Clawd the pilot, jev-pilot's pet</title>
-  <desc id="pdesc">Above the Claude Code prompt, Clawd shows what Claude is doing and its bubble says what Jev decided: thinking, reading a file, searching, running tests, flying when the effort is raised to max after two failures, writing the fix, then jumping rope and waving while idle.</desc>
+  <title id="ptitle">Claude the pilot, jev-pilot's pet</title>
+  <desc id="pdesc">Above the Claude Code prompt, the pilot shows what Claude is doing and its bubble says what Jev decided: thinking, reading a file, searching, running tests, flying when the effort is raised to max after two failures, writing the fix, then jumping rope and waving while idle.</desc>
   <style>
     {chr(10).join('    ' + c for c in tl.css)}
     .cursor {{ animation: blink 1s steps(2, start) infinite; }}

@@ -1,5 +1,5 @@
 /**
- * jev-pilot — the pet: Clawd (Claude Code's character) as a pilot, drawn in
+ * jev-pilot — the pet: Claude Code's character as a pilot, drawn in
  * half-block characters at the bottom right, and what it says.
  *
  * Pure: the sprite as rows of cells, the speech texts, and the one shared
@@ -84,7 +84,7 @@ export interface Cell {
 
 const CORAL = '#D97757'
 export const PALETTE: Record<string, string> = {
-  C: CORAL, // Clawd
+  C: CORAL, // the pilot's body
   E: '#0b1020', // eyes
   L: '#d4ff4f', // goggle lenses
   W: '#ffffff', // the lenses' glint
@@ -107,7 +107,7 @@ export const PALETTE: Record<string, string> = {
 }
 
 /**
- * Clawd as a pilot, from Claude Code's official 24x24 shape at 1.5 units per
+ * The pilot: Claude Code's character from its official 24x24 shape at 1.5 units per
  * pixel (the same pilot as the README banner and the demo video): goggles
  * pushed up on the forehead (pulled down over the eyes to fly), their lenses
  * glinting, eyes, arms, a teal scarf with its loose end, legs, and the
@@ -129,7 +129,7 @@ const FLAMES = ['...F.f....F.f...', '...f.F....f.F...']
 
 /**
  * The canvas every scene draws on: fixed, so the band never changes size.
- * Clawd's own part is the left BODY_W columns; to its right, what it holds.
+ * The pilot's own part is the left BODY_W columns; to its right, what it holds.
  */
 export const BODY_W = 18
 export const CANVAS_W = 30
@@ -203,7 +203,7 @@ function setAt(row: string, x: number, ch: string): string {
   return row.slice(0, x) + ch + row.slice(x + 1)
 }
 
-/** Clawd for one frame of one act, before it is placed. */
+/** The pilot for one frame of one act, before it is placed. */
 function clawdFor(act: Act, frame: number, blink: boolean): string[] {
   let rows = [...CLAWD]
   if (act === 'look' && !blink) {
@@ -216,7 +216,7 @@ function clawdFor(act: Act, frame: number, blink: boolean): string[] {
   }
   if (act === 'think') rows[3] = (rows[3] as string).replace(/E/g, 'C') // eyes up
   if (act === 'read' || act === 'search' || act === 'write' || act === 'run') {
-    // The eyes turn to what Clawd holds at its side (down, for the page).
+    // The eyes turn to what the pilot holds at its side (down, for the page).
     rows = rows.map((row, y) => (y === 2 || y === 3 ? setAt(setAt(row.replace(/E/g, 'C'), 5, 'E'), 12, 'E') : row))
     if (act !== 'search') rows[2] = (rows[2] as string).replace(/E/g, 'C')
   }
@@ -275,7 +275,7 @@ export function scenePixels(act: Act, frame = 0, blink = false, wind = frame): s
     }
   } else if (act === 'rope') {
     // Four beats: the rope overhead, coming down in front, under the feet
-    // (Clawd up in the air), coming round behind.
+    // (the pilot up in the air), coming round behind.
     const beat = frame % 4
     const lift = beat === 2 ? 2 : beat === 1 ? 1 : 0
     const top = CANVAS_H - clawd.length - lift
@@ -302,7 +302,7 @@ export function scenePixels(act: Act, frame = 0, blink = false, wind = frame): s
   return grid.map((row) => row.join(''))
 }
 
-/** Pixel art for what Clawd holds, each drawn to read as the thing at a glance. */
+/** Pixel art for what the pilot holds, each drawn to read as the thing at a glance. */
 const CLOUD = ['..RRR.RRR...', '.RRRRRRRRRR.', 'RRRRRRRRRRRR', 'RRRRRRRRRRRR', '.RRRRRRRRRR.', '...RRR.RR...']
 const BOOK = [
   '.PPPPP.PPPPP.',
@@ -328,13 +328,13 @@ const TERMINAL = [
 ]
 
 /**
- * What Clawd holds at its side while working, right of its body, by the
+ * What the pilot holds at its side while working, right of its body, by the
  * right hand (the arm ends at column 16, rows 4 and 5).
  */
 function drawProp(grid: Grid, act: Act, frame: number): void {
   const art = (x: number, y: number, rows: readonly string[]) => paste(grid, rows, x, y)
   const line = (x: number, y: number, pixels: string) => paste(grid, [pixels], x, y)
-  const X = BODY_W // the first column right of Clawd
+  const X = BODY_W // the first column right of the pilot
   if (act === 'think') {
     // Thought bubbles rising from the head into a cloud, "..." filling in.
     art(X + 1, 0, CLOUD)

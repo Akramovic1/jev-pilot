@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="320" viewBox="0 0 1280 320" role="img" aria-labelledby="title desc">
   <title id="title">jev-pilot</title>
-  <desc id="desc">Clawd, the Claude Code character, dressed as a pilot, flies at the height of the reasoning effort Jev picks: low for renaming a variable, xhigh for designing a job queue, max after two failed tool calls.</desc>
+  <desc id="desc">Claude Code's character, dressed as a pilot, flies at the height of the reasoning effort Jev picks: low for renaming a variable, xhigh for designing a job queue, max after two failed tool calls.</desc>
   <style>
     .far { animation: drift 60s linear infinite; }
     .near { animation: drift 28s linear infinite; }

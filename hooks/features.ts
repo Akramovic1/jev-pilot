@@ -18,7 +18,7 @@ export const FEATURE_INFO: Record<Feature, string> = {
   skills: 'picks the one skill a prompt needs (off: the full skill list stays)',
   strategy: 'advises splitting big work across subagents',
   model: 'switches the main conversation’s model (resets the prompt cache)',
-  pet: 'shows Clawd the pilot above the prompt',
+  pet: 'shows Claude the pilot above the prompt',
 }
 
 let defaults: Record<Feature, boolean> = {

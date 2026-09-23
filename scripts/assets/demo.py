@@ -71,7 +71,7 @@ PROMPT = BAND + 12 * 5 + 18
 H = PROMPT + 84
 svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox="0 0 {W} {H}" role="img" aria-labelledby="dtitle ddesc" font-family="{MONO}" font-size="14">
   <title id="dtitle">jev-pilot in a Claude Code session</title>
-  <desc id="ddesc">An illustrative session. A rename runs at low effort: Clawd thinks, writes, and its bubble says low, no skill, 99% sure. A failing-tests prompt starts at xhigh effort with the systematic-debugging skill: Clawd reads, searches and runs the tests; after two failures the effort is raised to max and Clawd flies; it writes the fix, the tests pass, and it jumps rope. Jev never writes in the conversation.</desc>
+  <desc id="ddesc">An illustrative session. A rename runs at low effort: the pilot thinks, writes, and its bubble says low, no skill, 99% sure. A failing-tests prompt starts at xhigh effort with the systematic-debugging skill: the pilot reads, searches and runs the tests; after two failures the effort is raised to max and it flies; it writes the fix, the tests pass, and it jumps rope. Jev never writes in the conversation.</desc>
   <style>
     {chr(10).join('    ' + c for c in tl.css)}
     .cursor {{ animation: blink 1s steps(2, start) infinite; }}
