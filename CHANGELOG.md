@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.1 — 2026-09-23
+
+- **OpenRouter app attribution.** Requests now name jev-pilot (`HTTP-Referer` and the app title), so its usage counts toward OpenRouter's app rankings for Jev.
+- **Engine calls stay at the call site.** Helpers no longer receive `$`; each hook passes the few engine calls they need. Behavior is unchanged, and the code now meets claude-code-templates' mod conventions.
+
 ## 0.4.0 — 2026-09-23
 
 First public release as **jev-pilot**.

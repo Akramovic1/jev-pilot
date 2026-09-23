@@ -222,6 +222,13 @@ export function requestBody(
   return JSON.stringify(body)
 }
 
+/** How jev-pilot names itself to OpenRouter. */
+export const OPENROUTER_APP = {
+  'http-referer': 'https://github.com/Akramovic1/jev-pilot',
+  'x-openrouter-title': 'jev-pilot',
+  'x-title': 'jev-pilot',
+}
+
 /** The request headers. */
 export function requestHeaders(
   provider: Provider,
@@ -231,7 +238,9 @@ export function requestHeaders(
   const common = { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` }
   if (provider === 'typesafe') return common
   // Optional on OpenRouter; names the app in its dashboard and logs.
-  if (provider === 'openrouter') return { ...common, 'x-openrouter-title': 'jev-pilot' }
+  // OpenRouter attributes requests to an app by these (its app rankings,
+  // the model page's "top apps"); both title spellings are accepted.
+  if (provider === 'openrouter') return { ...common, ...OPENROUTER_APP }
   return {
     ...common,
     'ai-gateway-auth-method': 'api-key',

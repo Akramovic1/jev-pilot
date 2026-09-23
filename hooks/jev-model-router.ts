@@ -55,7 +55,7 @@
  * Privacy: with a key set, the prompt text is sent to whichever backend the
  * key belongs to.
  */
-import type { EngineInterface, Register } from 'claude-code'
+import type { HttpInit, HttpResponse, Register } from 'claude-code'
 import { NOT_A_TASK, recentContext, signalsOf } from './context.ts'
 import type { ContextMessage } from './context.ts'
 import { appendEntry, entriesOf, LEDGER_KEY, reportPrompt, suggestions, summarize } from './ledger.ts'
@@ -93,12 +93,24 @@ interface Backend {
 }
 
 /**
+ * The engine calls the helpers below need. `$` is never handed to a helper:
+ * each hook builds this at its own call site, spelling every call on `$`
+ * there (see `io` in register).
+ */
+interface Io {
+  fetch: (url: string, init: HttpInit) => Promise<HttpResponse>
+  sleep: (ms: number) => Promise<void>
+  log: (text: string) => unknown
+  messages: () => Promise<readonly ContextMessage[]>
+}
+
+/**
  * One request to the backend, read as a decision; null without a backend, or
  * on timeout, error, a non-2xx or an unreadable answer. Every caller treats
  * null the same way: the request goes on as the engine built it.
  */
 async function classify(
-  $: EngineInterface,
+  io: Io,
   backend: Backend | null,
   state: Record<string, unknown>,
   withStrategy: boolean,
@@ -107,29 +119,29 @@ async function classify(
   if (!backend) return null
   try {
     const response = await Promise.race([
-      $.http.fetch(backend.url, {
+      io.fetch(backend.url, {
         method: 'POST',
         headers: requestHeaders(backend.provider, backend.apiKey, backend.modelId),
         body: requestBody(backend.provider, state, backend.modelId, withStrategy),
       }),
-      $.clock.sleep(backend.timeoutMs),
+      io.sleep(backend.timeoutMs),
     ])
     if (response && response.ok) return readDecision(response.text)
-    if (response) $.ui.log(`[jev-model-router] ${backend.provider} responded ${response.status}: ${response.text.slice(0, 200)}`)
-    else $.ui.log(`[jev-model-router] classification passed ${backend.timeoutMs}ms; leaving ${what} alone`)
+    if (response) await io.log(`[jev-model-router] ${backend.provider} responded ${response.status}: ${response.text.slice(0, 200)}`)
+    else await io.log(`[jev-model-router] classification passed ${backend.timeoutMs}ms; leaving ${what} alone`)
   } catch (error) {
-    $.ui.log(`[jev-model-router] classification failed: ${String(error)}`)
+    await io.log(`[jev-model-router] classification failed: ${String(error)}`)
   }
   return null
 }
 
 /** The conversation so far, or none when not `wanted` or unreadable. */
-async function readMessages($: EngineInterface, wanted: boolean): Promise<readonly ContextMessage[]> {
+async function readMessages(io: Io, wanted: boolean): Promise<readonly ContextMessage[]> {
   if (!wanted) return []
   try {
-    return await $.session.messages()
+    return await io.messages()
   } catch (error) {
-    $.ui.log(`[jev-model-router] could not read the conversation: ${String(error)}`)
+    await io.log(`[jev-model-router] could not read the conversation: ${String(error)}`)
     return []
   }
 }
@@ -246,6 +258,12 @@ export const register: Register = (on, options) => {
   let current: (LedgerEntry & { turnId: string }) | null = null
 
   on('prompt.submit', async ($, e, next) => {
+    const io: Io = {
+      fetch: (url, init) => $.http.fetch(url, init),
+      sleep: (ms) => $.clock.sleep(ms),
+      log: (text) => $.ui.log(text),
+      messages: () => $.session.messages(),
+    }
     // Before the routing guards: a module whose switches are all off has still
     // loaded, and that is exactly when its silence is most misleading.
     if (!announced) {
@@ -276,14 +294,14 @@ export const register: Register = (on, options) => {
     }
 
     const startedAt = await $.clock.now()
-    const messages = await readMessages($, contextLimits.messages > 0)
+    const messages = await readMessages(io, contextLimits.messages > 0)
     const recent = recentContext(messages, e.text, contextLimits)
     // A notification delivered mid-turn is not what the turn works on.
     if (isTask) lastPrompt = e.text
     let decision: Decision | null = null
     if (active) {
       decision = await classify(
-        $,
+        io,
         backend,
         { prompt: e.text, recent_context: recent, signals: signalsOf(e.text, messages) },
         planning,
@@ -342,6 +360,12 @@ export const register: Register = (on, options) => {
   })
 
   on('turn.step', async function* ($, e, next) {
+    const io: Io = {
+      fetch: (url, init) => $.http.fetch(url, init),
+      sleep: (ms) => $.clock.sleep(ms),
+      log: (text) => $.ui.log(text),
+      messages: () => $.session.messages(),
+    }
     // Every request names the id the engine resolved for it, a subagent's
     // included: that is where the main loop's switch finds its ids.
     ids.learn(e.model)
@@ -357,9 +381,9 @@ export const register: Register = (on, options) => {
           escalatedTurnId = e.turnId
           const effort = applied?.effort ?? e.effort
           const turn = current
-          const messages = await readMessages($, contextLimits.messages > 0)
+          const messages = await readMessages(io, contextLimits.messages > 0)
           const reread = await classify(
-            $,
+            io,
             backend,
             {
               prompt: lastPrompt,
@@ -517,6 +541,12 @@ export const register: Register = (on, options) => {
   })
 
   on('agent.spawn', async ($, e, next) => {
+    const io: Io = {
+      fetch: (url, init) => $.http.fetch(url, init),
+      sleep: (ms) => $.clock.sleep(ms),
+      log: (text) => $.ui.log(text),
+      messages: () => $.session.messages(),
+    }
     // Before the routing guards: a module whose switches are all off has still
     // loaded, and that is exactly when its silence is most misleading.
     if (!announced) {
@@ -550,7 +580,7 @@ export const register: Register = (on, options) => {
     if (active) {
       // A subagent's brief is self-contained by design: no conversation added.
       decision = await classify(
-        $,
+        io,
         backend,
         { prompt: e.prompt, description: e.description, agentType: e.subagentType },
         false,

@@ -493,3 +493,12 @@ test('a decision for the tier the session already runs keeps its exact id', () =
   const routing = route(decision, { model: 'claude-opus-5[1m]', effort: 'medium' }, config)
   expect(routing.model).toBeNull()
 })
+
+test('OpenRouter requests name the app, so they count toward its app rankings', () => {
+  const headers = requestHeaders('openrouter', 'k', DEFAULT_MODEL.openrouter)
+  expect(headers['http-referer']).toBe('https://github.com/Akramovic1/jev-pilot')
+  expect(headers['x-openrouter-title']).toBe('jev-pilot')
+  // Never sent to the other backends.
+  expect(requestHeaders('typesafe', 'k', 'jev-latest')['http-referer']).toBeUndefined()
+  expect(requestHeaders('gateway', 'k', 'typesafe-ai/jev')['http-referer']).toBeUndefined()
+})
