@@ -72,6 +72,7 @@
  * to whichever backend the key belongs to.
  */
 import type { Register } from 'claude-code'
+import { missOf } from './model-router.policy.ts'
 import { NOT_A_TASK, recentContext } from './context.ts'
 import { noteSkill } from './summary.ts'
 import { feature } from './features.ts'
@@ -300,11 +301,14 @@ export const register: Register = (on, options) => {
           $.clock.sleep(timeoutMs),
         ])
         if (response && response.ok) return response.text
-        // The body says why (a limit, a bad field): worth the one line.
+        // A timeout or a busy backend is routine (the pet says so): verbose
+        // only. Any other status is an error, and its body says why (a limit,
+        // a bad field): worth the one line.
+        const miss = missOf(response ? response.status : null)
+        const tell = (text: string) => (miss === 'error' || verbose ? $.ui.log(text) : undefined)
         if (response) {
-          $.ui.log(`[jev-skill-suggestion] ${active} responded ${response.status} to the ${what}: ${response.text.slice(0, 200)}`)
-        }
-        else $.ui.log(`[jev-skill-suggestion] ${what} passed ${timeoutMs}ms; no suggestion`)
+          tell(`[jev-skill-suggestion] ${active} responded ${response.status} to the ${what}: ${response.text.slice(0, 200)}`)
+        } else tell(`[jev-skill-suggestion] ${what} passed ${timeoutMs}ms; no suggestion`)
       } catch (error) {
         $.ui.log(`[jev-skill-suggestion] ${what} failed: ${String(error)}`)
       }

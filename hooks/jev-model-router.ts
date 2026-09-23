@@ -76,6 +76,7 @@ import {
   describeSetup,
   describeStatus,
   endpoint,
+  missOf,
   pendingDecisions,
   readDecision,
   selectProvider,
@@ -86,6 +87,7 @@ import {
   route,
   TIER_ORDER,
 } from './model-router.policy.ts'
+import type { Miss } from './model-router.policy.ts'
 import type { Decision, Effort, PolicyConfig, Provider, StrategyConfig, Tier } from './model-router.policy.ts'
 
 /** Where decisions are asked, when a backend is configured. */
@@ -106,13 +108,17 @@ interface Io {
   fetch: (url: string, init: HttpInit) => Promise<HttpResponse>
   sleep: (ms: number) => Promise<void>
   log: (text: string) => unknown
+  /** A line for the verbose log only: what is routine, not an error. */
+  detail: (text: string) => unknown
   messages: () => Promise<readonly ContextMessage[]>
 }
 
 /**
  * One request to the backend, read as a decision; null without a backend, or
- * on timeout, error, a non-2xx or an unreadable answer. Every caller treats
- * null the same way: the request goes on as the engine built it.
+ * on timeout, error, a non-2xx or an unreadable answer, with why (`miss`).
+ * Every caller treats a null decision the same way: the request goes on as
+ * the engine built it. A timeout or a busy backend is routine (the pet says
+ * so); only an error is logged whatever the log level.
  */
 async function classify(
   io: Io,
@@ -120,8 +126,8 @@ async function classify(
   state: Record<string, unknown>,
   withStrategy: boolean,
   what: string,
-): Promise<Decision | null> {
-  if (!backend) return null
+): Promise<{ decision: Decision | null; miss: Miss | null }> {
+  if (!backend) return { decision: null, miss: null }
   try {
     const response = await Promise.race([
       io.fetch(backend.url, {
@@ -131,13 +137,19 @@ async function classify(
       }),
       io.sleep(backend.timeoutMs),
     ])
-    if (response && response.ok) return readDecision(response.text)
-    if (response) await io.log(`[jev-model-router] ${backend.provider} responded ${response.status}: ${response.text.slice(0, 200)}`)
-    else await io.log(`[jev-model-router] classification passed ${backend.timeoutMs}ms; leaving ${what} alone`)
+    if (response && response.ok) {
+      const decision = readDecision(response.text)
+      return { decision, miss: decision ? null : 'error' }
+    }
+    const miss = missOf(response ? response.status : null)
+    const tell = miss === 'error' ? io.log : io.detail
+    if (response) await tell(`[jev-model-router] ${backend.provider} responded ${response.status}: ${response.text.slice(0, 200)}`)
+    else await tell(`[jev-model-router] classification passed ${backend.timeoutMs}ms; leaving ${what} alone`)
+    return { decision: null, miss }
   } catch (error) {
     await io.log(`[jev-model-router] classification failed: ${String(error)}`)
+    return { decision: null, miss: 'error' }
   }
-  return null
 }
 
 /** The conversation so far, or none when not `wanted` or unreadable. */
@@ -261,7 +273,7 @@ export const register: Register = (on, options) => {
   // routing a turn on a decision made for a different prompt.
   // Each classified prompt waits with its decision and its ledger draft, so
   // the turn that reads it knows which prompt it is working on.
-  const pending = pendingDecisions<{ decision: Decision | null; prompt: string; draft: Draft }>()
+  const pending = pendingDecisions<{ decision: Decision | null; prompt: string; draft: Draft; miss: Miss | null }>()
   // Said once, the first time a hook runs. A router that loaded and one that
   // never loaded are otherwise told apart only by the absence of later lines,
   // and absence is not evidence: the policy leaves most turns alone anyway.
@@ -306,6 +318,7 @@ export const register: Register = (on, options) => {
       fetch: (url, init) => $.http.fetch(url, init),
       sleep: (ms) => $.clock.sleep(ms),
       log: (text) => $.ui.log(text),
+      detail: (text) => (verbose ? $.ui.log(text) : undefined),
       messages: () => $.session.messages(),
     }
     // Before the routing guards: a module whose switches are all off has still
@@ -330,14 +343,15 @@ export const register: Register = (on, options) => {
     const messages = await readMessages(io, contextLimits.messages > 0)
     const recent = recentContext(messages, e.text, contextLimits)
     let decision: Decision | null = null
+    let miss: Miss | null = null
     if (active) {
-      decision = await classify(
+      ;({ decision, miss } = await classify(
         io,
         backend,
         { prompt: e.text, recent_context: recent, signals: signalsOf(e.text, messages) },
         planning,
         'the turn',
-      )
+      ))
     } else {
       // No backend: the engine's own small-model classifier answers the same
       // question, without the confidence the policy's threshold reads, and
@@ -384,7 +398,7 @@ export const register: Register = (on, options) => {
       strategyConfidence: decision?.strategyConfidence ?? null,
       advised: block !== null,
     }
-    pending.put({ decision, prompt: e.text, draft })
+    pending.put({ decision, prompt: e.text, draft, miss })
     // Attached on the way down: one block after the prompt as typed, read by
     // the model and never shown to the person.
     const result = await next(block ? { ...e, context: [...(e.context ?? []), block] } : e)
@@ -398,6 +412,7 @@ export const register: Register = (on, options) => {
       fetch: (url, init) => $.http.fetch(url, init),
       sleep: (ms) => $.clock.sleep(ms),
       log: (text) => $.ui.log(text),
+      detail: (text) => (verbose ? $.ui.log(text) : undefined),
       messages: () => $.session.messages(),
     }
     // Every request names the id the engine resolved for it, a subagent's
@@ -422,18 +437,20 @@ export const register: Register = (on, options) => {
           const reread =
             prompt === null
               ? null
-              : await classify(
-                  io,
-                  backend,
-                  {
-                    prompt,
-                    recent_context: recentContext(messages, prompt, contextLimits),
-                    signals: signalsOf(prompt, messages),
-                    trouble: `${failed} tool calls in a row have failed while working on this request`,
-                  },
-                  false,
-                  'the effort',
-                )
+              : (
+                  await classify(
+                    io,
+                    backend,
+                    {
+                      prompt,
+                      recent_context: recentContext(messages, prompt, contextLimits),
+                      signals: signalsOf(prompt, messages),
+                      trouble: `${failed} tool calls in a row have failed while working on this request`,
+                    },
+                    false,
+                    'the effort',
+                  )
+                ).decision
           const level = reread ? effortScoreOf(reread, margin) : null
           const raised = escalate(effort, failed, escalateAfterErrors, level, raisedCeiling)
           if (raised) {
@@ -527,6 +544,7 @@ export const register: Register = (on, options) => {
       say(
         turnSpeech({
           answered: decision !== null,
+          miss: taken?.miss ?? null,
           applied: change.effort ?? null,
           current: typeof e.effort === 'string' ? e.effort : null,
           wanted: level === null ? null : effortLevel(level),
@@ -659,6 +677,7 @@ export const register: Register = (on, options) => {
       fetch: (url, init) => $.http.fetch(url, init),
       sleep: (ms) => $.clock.sleep(ms),
       log: (text) => $.ui.log(text),
+      detail: (text) => (verbose ? $.ui.log(text) : undefined),
       messages: () => $.session.messages(),
     }
     // Before the routing guards: a module whose switches are all off has still
@@ -680,13 +699,15 @@ export const register: Register = (on, options) => {
     let decision: Decision | null = null
     if (active) {
       // A subagent's brief is self-contained by design: no conversation added.
-      decision = await classify(
-        io,
-        backend,
-        { prompt: e.prompt, description: e.description, agentType: e.subagentType },
-        false,
-        'the subagent',
-      )
+      decision = (
+        await classify(
+          io,
+          backend,
+          { prompt: e.prompt, description: e.description, agentType: e.subagentType },
+          false,
+          'the subagent',
+        )
+      ).decision
     } else {
       try {
         const label = await $.model.classify(e.prompt, TIER_ORDER)

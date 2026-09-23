@@ -183,3 +183,11 @@ test('the bubble says the effort, the skill and how sure', () => {
   expect(turnSpeech({ ...base, applied: null, skill: undefined, confidence: 0.42 }).text).toBe('high kept · wanted low · 42% sure')
   expect(turnSpeech({ ...base, answered: false, applied: null, skill: null }).mood).toBe('alert')
 })
+
+test('with no answer, the bubble says why: too slow, too busy, or an error', () => {
+  const none = { answered: false, applied: null, current: 'high', wanted: null, confidence: null, skill: undefined, advised: null }
+  expect(turnSpeech({ ...none, miss: 'timeout' }).text).toBe('no answer in time · left as is')
+  expect(turnSpeech({ ...none, miss: 'busy' }).text).toBe('jev busy · left as is')
+  expect(turnSpeech({ ...none, miss: 'error' }).text).toBe('jev error · left as is')
+  expect(turnSpeech(none).text).toBe('no answer in time · left as is')
+})

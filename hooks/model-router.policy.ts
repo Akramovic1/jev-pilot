@@ -688,6 +688,19 @@ export function adviseStrategy(decision: Decision | null, config: StrategyConfig
 
 // --- escalation within a turn -----------------------------------------------
 
+/** Why the decision model gave no answer: too slow, too busy, or an error. */
+export type Miss = 'timeout' | 'busy' | 'error'
+
+/**
+ * The miss a response stands for: no response in time (null) is a timeout;
+ * 429 (rate limited), 502, 503 and 529 (overloaded) mean the backend is busy
+ * and will answer again later; any other status is an error worth showing.
+ */
+export function missOf(status: number | null): Miss {
+  if (status === null) return 'timeout'
+  return status === 429 || status === 502 || status === 503 || status === 529 ? 'busy' : 'error'
+}
+
 /**
  * Whether a later request of a turn is the engine's own move to another
  * model: it names a model other than the one the engine named for the turn's

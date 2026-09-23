@@ -3,7 +3,7 @@ import { expect, test } from 'bun:test'
 import { NOT_A_TASK } from '../hooks/context.ts'
 import { configKeysOf, reportPrompt, suggestions } from '../hooks/ledger.ts'
 import type { LedgerEntry } from '../hooks/ledger.ts'
-import { engineMoved, pendingDecisions, readDecision, route } from '../hooks/model-router.policy.ts'
+import { engineMoved, missOf, pendingDecisions, readDecision, route } from '../hooks/model-router.policy.ts'
 import type { Decision, PolicyConfig } from '../hooks/model-router.policy.ts'
 import {
   catalog,
@@ -182,4 +182,12 @@ test('the same model on a later request is the turn going on, not a move', () =>
   expect(engineMoved('claude-opus-5-5', 'claude-opus-5-5')).toBe(false)
   // No first request seen: nothing is known to have moved.
   expect(engineMoved(null, 'claude-opus-5-5')).toBe(false)
+})
+
+// ---- Jev busy: an overloaded backend is routine, not an error ------------------
+
+test('no response in time is a timeout; 429, 502, 503 and 529 mean busy; other statuses are errors', () => {
+  expect(missOf(null)).toBe('timeout')
+  for (const status of [429, 502, 503, 529]) expect(missOf(status)).toBe('busy')
+  for (const status of [400, 401, 404, 500]) expect(missOf(status)).toBe('error')
 })

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.6 — 2026-09-23
+
+- **A busy Jev stays quiet.** When Jev doesn't answer in time or its backend is overloaded (HTTP 429, 502, 503, 529), nothing is written in the conversation any more; that's in the verbose log. The pet's bubble says which it was: `no answer in time · left as is` or `jev busy · left as is`. Real errors (a bad key, a malformed request) still show, and the bubble says `jev error · left as is`.
+
 ## 0.4.5 — 2026-09-23
 
 - **A smaller pilot.** The pet is redrawn at 3/4 scale with every part kept (goggles, head, eyes, both rows of arms, the scarf's loose end, long legs, flames): 5 lines tall instead of 6, and 24 columns wide instead of 30. The book, magnifier, paper, terminal and thought cloud are redrawn to match.

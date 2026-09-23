@@ -49,11 +49,14 @@ export function sure(confidence: number): string {
 /**
  * What the pet says when a turn starts:
  *   low · no skill · 89% sure
+ *   jev busy · left as is          (the backend overloaded; the turn runs as set)
  *   xhigh · /systematic-debugging · parallel · 88% sure
  *   high kept · wanted low · 42% sure
  */
 export function turnSpeech(facts: {
   answered: boolean
+  /** Why the decision model gave no answer, when it gave none. */
+  miss?: 'timeout' | 'busy' | 'error' | null
   applied: string | null
   current: string | null
   wanted: string | null
@@ -61,7 +64,10 @@ export function turnSpeech(facts: {
   skill: string | null | undefined
   advised: string | null
 }): Speech {
-  if (!facts.answered) return { text: 'no answer in time · left as is', mood: 'alert' }
+  if (!facts.answered) {
+    const why = facts.miss === 'busy' ? 'jev busy' : facts.miss === 'error' ? 'jev error' : 'no answer in time'
+    return { text: `${why} · left as is`, mood: 'alert' }
+  }
   const parts: string[] = []
   const effort = facts.applied ?? facts.current
   if (facts.applied) parts.push(facts.applied)
