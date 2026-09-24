@@ -240,6 +240,7 @@ export const register: Register = (on, options) => {
       deep: text('deepModel', 'opus'),
     },
     minUpgradeConfidence: number('minUpgradeConfidence', 0.3),
+    minHighConfidence: number('minHighConfidence', 0.5),
     minDowngradeConfidence: number('minDowngradeConfidence', 0.6),
     maxEffort: effortOption('maxEffort', 'xhigh'),
     // A near tie between two effort levels takes the higher one.

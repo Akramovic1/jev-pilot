@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.14 — 2026-09-24
+
+- **Mechanical work across many files is low.** "A rename" sat under low but "a change across several files" under high, so a rename across three files, or a search, went to high. Low now names mechanical work across many files (a rename or find-and-replace, a search that lists what it finds), and high is a change across several files *that needs working out*. On jev-bench, rename and search went from high to low.
+- **Raising to high or above takes a surer answer.** New `minHighConfidence` (0.5): raises to high, xhigh or max need Jev at least 50% sure; raises to medium keep `minUpgradeConfidence` (0.3). Replayed on the 76 labelled real requests from a medium session: turns sent to high or above 25 → 13, medium tasks right 14 → 20 of 26.
+- **jev-bench** (`bench/`): four small coding tasks run by Claude Code headless with and without jev-pilot, each checked automatically. With 0.4.14: 4/4 in both setups, $1.01 with jev-pilot vs $1.09 without.
+
 ## 0.4.13 — 2026-09-24
 
 - **Effort is a choice, not a score.** Jev now picks one of five named levels (low, medium, high, xhigh, max), each described by when to choose it, instead of rating difficulty on a 0-4 scale. On the 76 labelled real requests, answers off by two or more levels went from 8-9 to 5 across two runs, medium tasks answered right from 7 to 10 of 26, and the misses are balanced instead of mostly too high. Every question to Jev is now a choice.

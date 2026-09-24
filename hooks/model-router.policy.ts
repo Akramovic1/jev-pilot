@@ -111,9 +111,9 @@ const TIER_CRITERIA: Record<Tier, string> = {
  * is something it can recognise in the request.
  */
 const EFFORT_RUBRIC = [
-  'Answered from what is already known, or one mechanical step: a lookup, a single command, a rename, formatting, a one-line change.',
+  'Answered from what is already known, or mechanical work with nothing to work out: a lookup, a single command, a rename or find-and-replace (even across many files), a search that lists what it finds, formatting, a one-line change.',
   'An ordinary, well-specified change to one or a few files, or a direct question about code already in view.',
-  'A change across several files, a bug whose cause is described but has to be traced, writing tests, or reviewing a diff with care.',
+  'A change across several files that needs working out, a bug whose cause is described but has to be traced, writing tests, or reviewing a diff with care.',
   'Design across several components, a bug whose cause is unknown, a refactor with many dependents, or careful reasoning about concurrency, performance or failure modes.',
   'Novel architecture, a security or data-integrity question, a failure that resisted earlier attempts, or work where a subtle mistake is costly and hard to undo.',
 ] as const
@@ -553,6 +553,14 @@ export interface PolicyConfig {
    */
   minUpgradeConfidence: number
   /**
+   * The bar for raising the effort to `high` or above: those rungs cost the
+   * most, so the model must be surer than for low to medium. Measured on 76
+   * labelled real requests from a medium session, 0.5 halved the turns sent
+   * to high or above (25 to 13) and got 6 more medium tasks right. 0.5 when
+   * absent.
+   */
+  minHighConfidence?: number
+  /**
    * How sure it must be to spend less. Being wrong here means a task handled
    * by too small a model or too little thought, so the bar is high.
    */
@@ -672,12 +680,15 @@ export function route(
     // A short follow-up approves or continues work its words don't describe:
     // it may raise the effort, never lower it.
     const lowering = currentRank !== null && wantedRank < currentRank
+    // Raising to high or above takes a surer answer than a raise to medium.
+    const toHigh = !lowering && wantedRank >= EFFORT_ORDER.indexOf('high')
+    const sureOfHigh = decision.effortConfidence === null || decision.effortConfidence >= (config.minHighConfidence ?? 0.5)
     if (
       comparable &&
       !aboveCeiling &&
       !(hints.noLowering && lowering) &&
       wantedRank !== currentRank &&
-      (forced || allowed(wantedRank, currentRank, decision.effortConfidence, config))
+      (forced || (allowed(wantedRank, currentRank, decision.effortConfidence, config) && (!toHigh || sureOfHigh)))
     ) {
       effort = wanted
     }

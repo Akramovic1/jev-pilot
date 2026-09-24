@@ -1,0 +1,42 @@
+[
+ {
+  "task": "1-rename",
+  "setup": "jev",
+  "run": 1,
+  "passed": true,
+  "costUsd": 0.27644399999999997,
+  "inputTokens": 18,
+  "outputTokens": 2611,
+  "cacheReadTokens": 247800,
+  "cacheWriteTokens": 21824,
+  "turns": 15,
+  "seconds": 30,
+  "stopped": null,
+  "models": {
+   "opus-5-5[1m]": 0.276
+  },
+  "jev": [
+   "medium→low (fast)"
+  ]
+ },
+ {
+  "task": "4-search",
+  "setup": "jev",
+  "run": 1,
+  "passed": true,
+  "costUsd": 0.1828016,
+  "inputTokens": 8,
+  "outputTokens": 767,
+  "cacheReadTokens": 86868,
+  "cacheWriteTokens": 18757,
+  "turns": 4,
+  "seconds": 11,
+  "stopped": null,
+  "models": {
+   "opus-5-5[1m]": 0.183
+  },
+  "jev": [
+   "medium→low (fast)"
+  ]
+ }
+]

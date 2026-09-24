@@ -422,3 +422,24 @@ test('the newest assistant message keeps its beginning and its end: where it ask
   expect(recent).toContain('Should I start writing plan 2?')
   expect(recent.length).toBeLessThanOrEqual(2000)
 })
+
+// ---- raising to high or above takes a surer answer (measured, 0.4.14) -------------
+
+test('a raise to high or above needs 50% confidence; a raise to medium still needs only 30%', () => {
+  const answer = (level: string, confidence: number) => ({
+    tier: 'balanced' as const, confidence: 0.9, risky: 0, effort: EFFORT_ORDER.indexOf(level as never), effortConfidence: confidence,
+    effortProbabilities: { [String(EFFORT_ORDER.indexOf(level as never))]: 1 },
+  })
+  const policy = { ...config, maxEffort: 'xhigh' as const }
+  expect(route(answer('high', 0.45), { model: 'claude-opus-5-5', effort: 'medium' }, policy).effort).toBeNull()
+  expect(route(answer('high', 0.55), { model: 'claude-opus-5-5', effort: 'medium' }, policy).effort).toBe('high')
+  expect(route(answer('medium', 0.35), { model: 'claude-opus-5-5', effort: 'low' }, policy).effort).toBe('medium')
+  expect(route(answer('high', 0.45), { model: 'claude-opus-5-5', effort: 'medium' }, { ...policy, minHighConfidence: 0.4 }).effort).toBe('high')
+})
+
+test('mechanical work across many files reads as low: a rename, a find-and-replace, a search that lists', () => {
+  const options = (questions('openrouter').effort as { criteria: Record<string, string> }).criteria
+  expect(options.low).toContain('a rename or find-and-replace (even across many files)')
+  expect(options.low).toContain('a search that lists what it finds')
+  expect(options.high).toContain('that needs working out')
+})
