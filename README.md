@@ -18,6 +18,7 @@
   <a href="#-install">Install</a> ·
   <a href="#-how-it-works">How it works</a> ·
   <a href="#%EF%B8%8F-meet-the-pilot">The pet</a> ·
+  <a href="#-the-crew-custom-models-and-other-agents">The crew</a> ·
   <a href="#-see-if-its-paying-off">Report</a> ·
   <a href="#%EF%B8%8F-configuration">Configuration</a> ·
   <a href="#-acknowledgements">Acknowledgements</a>
@@ -66,7 +67,7 @@ claude-jev          # takes the same arguments as claude: claude-jev -c, claude-
 
 1. Checks that Claude Code is installed and new enough.
 2. Adds this repo as a Claude Code plugin marketplace and runs `claude plugin install jev-pilot@jev-pilot`. The key is passed with `--config`, so Claude Code keeps it in its own credential store, not in plain settings.
-3. Links `claude-jev` into `~/.local/bin`. It's plain `claude` with function hooks on.
+3. Links `claude-jev` into `~/.local/bin`. It's plain `claude` with function hooks on, plus the local [router](#-the-crew-custom-models-and-other-agents) for custom models.
 
 It changes nothing else. Re-running it updates jev-pilot and keeps your key. For scripted installs, set `JEV_OPENROUTER_KEY=sk-or-…` (or `JEV_SKIP_KEY=1`) to skip the prompt.
 
@@ -217,6 +218,66 @@ Switches are remembered across sessions. `/jev skills off` leaves skills exactly
 - **A line per turn in the conversation:** set `display` to `both` or `transcript`, and each turn gets one line, such as `jev · low (93% sure) · no skill · 1.3s`.
 - **Every raw score:** turn on `verboseLog` to see each answer with its confidence, such as `tier fast (0.99) · effort 0.0 → low (1.00) · risky 0.10 · strategy direct (1.00)` and `needs a skill 0.09`.
 
+## 👥 The crew: custom models and other agents
+
+jev-pilot can bring more workers into a Claude Code session than Claude alone:
+
+- **Custom models:** three slots, `alpha`, `beta` and `gamma`, each holding any [OpenRouter model](https://openrouter.ai/models). `alpha` starts as `deepseek/deepseek-v4.1-flash`; `beta` and `gamma` start empty.
+- **Codex and OpenCode:** your own `codex` and `opencode` CLIs, with your own logins, as code reviewers. They run as themselves, not through OpenRouter.
+
+**You choose how they're used** with a mode. Within that mode, Jev decides task by task.
+
+| Mode | What happens |
+|---|---|
+| `standard` (default) | Claude only. Jev picks Haiku, Sonnet or Opus and the effort. |
+| `budget` | Subagent work that needs no judgment (searching, reading and reporting, boilerplate) can go to a custom model, when Jev is sure. Opus keeps the judgment. |
+| `junior-lead` | A junior on a custom model writes easy, well-specified code. Opus, as tech lead, reads its diff, runs the tests and sends it back once if something's wrong. You get a cheap implementation reviewed at Opus level. |
+| `second-opinion` | After a significant change, Claude asks Codex (or OpenCode) for a review before calling the work done, then fixes what's right and says why it disagrees with the rest. |
+| `quality` | Every subagent runs on Opus, plus the external review. |
+
+Outside these modes you can still ask for a review at any time: *"have Codex review this"*. Claude then spawns `jev-pilot:codex-review`.
+
+```
+/jev status                          the mode, the slots, and a health check of every worker
+/jev mode junior-lead                standard · budget · junior-lead · second-opinion · quality
+/jev alpha qwen/qwen3-coder          put any OpenRouter model in a slot (beta, gamma likewise)
+/jev beta off                        empty a slot
+/jev junior beta                     which slot the junior runs on
+/jev reviewer opencode               which agent reviews: codex or opencode
+```
+
+Changes apply from the next turn and are remembered across sessions.
+
+**Every worker is checked** when the session starts and on `/jev status`:
+
+```
+health:
+  router     ✓  http://127.0.0.1:8799
+  alpha      ✓  deepseek/deepseek-v4.1-flash · answering
+  codex      ✓  Logged in using ChatGPT
+  opencode   ✓  opencode 1.18.30 · GitHub Copilot, Fireworks AI, OpenAI…
+```
+
+A custom model has to answer a 1-token request, Codex has to be logged in, and OpenCode has to have a provider logged in. Only the workers that pass are used. If the junior's model is down, the junior runs on Sonnet. If the chosen reviewer is down, the other one reviews, and if both are down, Claude says there was no external review.
+
+<details>
+<summary><b>How custom models reach Claude Code</b></summary>
+
+<br>
+
+Claude Code talks to one server. `claude-jev` starts **jev-router**, a small local proxy on `127.0.0.1:8799` with no dependencies, and points Claude Code at it:
+
+- A request for `jev-alpha`, `jev-beta` or `jev-gamma` goes to that slot's model on OpenRouter, which speaks the same Anthropic Messages format, tool calls included. It's sent with your OpenRouter key.
+- Every other request streams through to Anthropic unchanged, headers and all, so your Claude login and plan work exactly as before. The OpenRouter key never goes to Anthropic, and your Claude login never goes to OpenRouter.
+
+The router reads the slots from `~/.claude/jev-pilot/models.json`, which jev-pilot writes, so `/jev alpha <model>` applies at once. It logs which slot went where (never the content) to `~/.claude/jev-pilot/router.log`. `claude-jev` also sets `ENABLE_TOOL_SEARCH=true`: without it, Claude Code sends every tool's schema with every request when it talks to a custom server.
+
+`JEV_ROUTER=off claude-jev` starts without the router. Custom models are then off, and everything else works as before. `JEV_ROUTER_PORT` changes the port.
+
+A reviewer is a small agent on Haiku with only Bash. It writes your brief to a temporary file and runs `codex exec -s read-only` (Codex's read-only sandbox) or `opencode run --agent plan` (OpenCode's read-only agent), then brings back the findings: P1/P2/P3, each with file:line and a fix, and a verdict. A review takes about half a minute to a few minutes.
+
+</details>
+
 ## 📊 See if it's paying off
 
 Every main-conversation turn is recorded: what Jev answered, the effort the turn started at, whether it was raised, tool calls, failures, how it ended, and output tokens. **No prompt text is ever stored.** After a few days, run `/jev-pilot:report` in a session:
@@ -264,6 +325,10 @@ Every option has a sensible default. On a marketplace install, change options wi
 | `verboseLog` | false | log every step: each answer with its confidence, the skill ranking, and why a turn was left alone |
 | `suggestSkills` | true | pick one skill per prompt; off leaves skills as Claude Code handles them |
 | `logDecisions` | true | master switch for jev-pilot's messages in the conversation (errors always show) |
+| `mode` | `standard` | how the [crew](#-the-crew-custom-models-and-other-agents) is used: `standard`, `budget`, `junior-lead`, `second-opinion`, `quality` |
+| `alphaModel` / `betaModel` / `gammaModel` | `deepseek/deepseek-v4.1-flash` / — / — | the custom model slots: any OpenRouter model id |
+| `alphaWhen` / `betaWhen` / `gammaWhen` | bulk work with nothing to judge | when Jev should choose that slot, in plain words |
+| `junior` / `reviewer` | `alpha` / `codex` | the junior's slot, and the external reviewer (`codex` or `opencode`) |
 
 All options are listed, with descriptions, in [`.claude-plugin/plugin.json`](.claude-plugin/plugin.json).
 
@@ -297,6 +362,7 @@ All options are listed, with descriptions, in [`.claude-plugin/plugin.json`](.cl
   - skill names and descriptions, and the opening of the shortlisted `SKILL.md` files.
 
   Tool input and output are never sent. `contextMessages: 0` sends no conversation.
+- **The crew:** a custom model gets the subagent's whole conversation, through OpenRouter, like any model would. A reviewer runs the `codex` or `opencode` CLI on your machine, which reads your code and talks to its own provider with your own login. Neither happens in `standard` mode unless you ask for a review.
 
 ## ⚖️ What it will and won't do
 

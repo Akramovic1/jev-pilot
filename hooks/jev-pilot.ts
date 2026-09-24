@@ -14,6 +14,7 @@ import { register as registerModelRouter } from './jev-model-router.ts'
 import { register as registerSkillSuggestion } from './jev-skill-suggestion.ts'
 import { register as registerPet } from './jev-pet.tsx'
 import { initFeatures } from './features.ts'
+import { initCrew } from './crew-state.ts'
 
 export const register: Register = (on, options) => {
   // Every part's default comes from the options; /jev switches them live.
@@ -28,6 +29,8 @@ export const register: Register = (on, options) => {
     model: flag('routeMainModel', false),
     pet: display === 'pet' || display === 'both',
   })
+  // The crew's defaults: mode, custom model slots, junior, reviewer.
+  initCrew(options)
   registerModelRouter(on, options)
   registerSkillSuggestion(on, options)
   registerPet(on, options)

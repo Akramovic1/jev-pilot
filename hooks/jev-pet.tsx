@@ -28,6 +28,10 @@ import {
   parseJevCommand,
   setFeature,
 } from './features.ts'
+import { applyCrewCommand, describeCrew, parseCrewCommand } from './crew.ts'
+import { resetBriefing } from './summary.ts'
+import { crew, crewOverrides, describeHealth, router, setCrewOverrides } from './crew-state.ts'
+import { CREW_KEY, checkCrew, checkSlot, ensureCrew, publishSlots, registerCrew, type CrewIo } from './crew-run.ts'
 import {
   type Act,
   ACT_LABEL,
@@ -58,7 +62,7 @@ const PLAY_STEP_MS = 180
 const PLAY_LOOPS = { rope: 4, wave: 4, look: 2 } as const
 const SPINNER = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
 
-export const register: Register = (on) => {
+export const register: Register = (on, options) => {
   let act: Act = 'rest'
   let frame = 0
   let blink = false
@@ -184,6 +188,40 @@ export const register: Register = (on) => {
   })
 
   on('command.run', { command: 'jev' }, async ($, e) => {
+    // The crew: `/jev status`, `/jev mode ...`, `/jev alpha <model>|off`,
+    // `/jev junior <slot>`, `/jev reviewer <codex|opencode>`.
+    const crewCommand = /^\s*status\s*$/i.test(e.args) ? ({ kind: 'show' } as const) : parseCrewCommand(e.args)
+    if (crewCommand) {
+      const crewIo: CrewIo = {
+        fetch: (url, init) => $.http.fetch(url, init),
+        home: () => $.env.get('HOME'),
+        routerUrl: () => $.env.get('JEV_ROUTER_URL'),
+        write: (path, text) => $.fs.write(path, text),
+        run: (argv, timeoutMs) => $.process.run(argv, { timeoutMs }),
+        storeGet: (key) => $.store.get(key),
+        sleep: (ms) => $.clock.sleep(ms),
+        register: async (spec) => {
+          await $.agent.register(spec)
+        },
+      }
+      const openrouterKey = typeof options.openrouterApiKey === 'string' && options.openrouterApiKey ? options.openrouterApiKey : null
+      await ensureCrew(crewIo, openrouterKey)
+      if (crewCommand.kind === 'unknown') return { text: `jev-pilot: unknown "${crewCommand.text}".\n${describeCrew(crew(), router() !== null)}` }
+      if (crewCommand.kind === 'show') {
+        await checkCrew(crewIo, openrouterKey)
+        await registerCrew(crewIo)
+        return { text: `${describeCrew(crew(), router() !== null)}\n${describeHealth()}` }
+      }
+      setCrewOverrides(applyCrewCommand(crewOverrides(), crewCommand))
+      await $.store.set(CREW_KEY, crewOverrides()).catch((error) => $.ui.log(`[jev-pilot] crew not saved: ${String(error)}`))
+      await publishSlots(crewIo).catch((error) => $.ui.log(`[jev-pilot] custom models not published: ${String(error)}`))
+      if (crewCommand.kind === 'model' && crewCommand.model) await checkSlot(crewIo, openrouterKey, crewCommand.slot, crewCommand.model)
+      // A new junior, say: its agent type from the next turn, and the model
+      // told about the change with its next prompt.
+      await registerCrew(crewIo)
+      resetBriefing()
+      return { text: `${describeCrew(crew(), router() !== null)}\n${describeHealth()}` }
+    }
     const command = parseJevCommand(e.args)
     if (command.kind === 'unknown') {
       return { text: `jev-pilot: unknown "${command.text}".\n${describeFeatures()}` }

@@ -1,7 +1,7 @@
 {
   "name": "jev-pilot",
-  "version": "0.4.14",
-  "description": "TypeSafe's Jev decides how Claude Code works on each prompt: the main conversation's reasoning effort (low to xhigh, raised to max mid-turn when tool calls keep failing), each subagent's model, whether to split the work across subagents, and the one skill the prompt needs. Reads the prompt with recent context, records every decision, and suggests its own tuning. Backends: OpenRouter, TypeSafe's API, the Vercel AI Gateway, or Claude Code's built-in classifier. Built on claude-code-templates' jev-model-router and jev-skill-suggestion.",
+  "version": "0.5.0",
+  "description": "TypeSafe's Jev decides how Claude Code works on each prompt: the main conversation's reasoning effort (low to xhigh, raised to max mid-turn when tool calls keep failing), each subagent's model, whether to split the work across subagents, and the one skill the prompt needs. Brings in custom OpenRouter models (a junior coder reviewed by Opus, or cheap bulk work) and Codex or OpenCode as reviewers, in modes you choose, each health-checked. Reads the prompt with recent context, records every decision, and suggests its own tuning. Backends: OpenRouter, TypeSafe's API, the Vercel AI Gateway, or Claude Code's built-in classifier. Built on claude-code-templates' jev-model-router and jev-skill-suggestion.",
   "author": {
     "name": "Ahmed Akram",
     "url": "https://github.com/Akramovic1"
@@ -324,6 +324,76 @@
       "title": "Never suggested",
       "description": "Comma-separated skill names the decision model is never offered; they stay reachable by typing /name",
       "default": ""
+    },
+    "mode": {
+      "type": "string",
+      "title": "Mode",
+      "description": "How work is shared out: standard (Claude only), budget (custom models take subagent work with nothing to judge), junior-lead (a junior on a custom model writes easy code, Opus reviews it), second-opinion (Codex or OpenCode reviews significant changes), quality (Opus for every subagent, plus an external review). /jev mode <name> switches it live",
+      "default": "standard",
+      "options": [
+        "standard",
+        "budget",
+        "junior-lead",
+        "second-opinion",
+        "quality"
+      ]
+    },
+    "alphaModel": {
+      "type": "string",
+      "title": "Custom model alpha",
+      "description": "An OpenRouter model id for the alpha slot (empty turns it off); /jev alpha <model> changes it live. Needs claude-jev (it starts the local router)",
+      "default": "deepseek/deepseek-v4.1-flash"
+    },
+    "alphaWhen": {
+      "type": "string",
+      "title": "When to choose alpha",
+      "description": "What Jev reads to decide when a subagent should run on alpha",
+      "default": "Choose for bulk work with nothing to judge, where cost matters more than precision: searching or reading across many files and reporting what is there, summarizing, listing, filling in boilerplate from an existing pattern."
+    },
+    "betaModel": {
+      "type": "string",
+      "title": "Custom model beta",
+      "description": "An OpenRouter model id for the beta slot (empty: off)",
+      "default": ""
+    },
+    "betaWhen": {
+      "type": "string",
+      "title": "When to choose beta",
+      "description": "What Jev reads to decide when a subagent should run on beta",
+      "default": "Choose for bulk work with nothing to judge, where cost matters more than precision: searching or reading across many files and reporting what is there, summarizing, listing, filling in boilerplate from an existing pattern."
+    },
+    "gammaModel": {
+      "type": "string",
+      "title": "Custom model gamma",
+      "description": "An OpenRouter model id for the gamma slot (empty: off)",
+      "default": ""
+    },
+    "gammaWhen": {
+      "type": "string",
+      "title": "When to choose gamma",
+      "description": "What Jev reads to decide when a subagent should run on gamma",
+      "default": "Choose for bulk work with nothing to judge, where cost matters more than precision: searching or reading across many files and reporting what is there, summarizing, listing, filling in boilerplate from an existing pattern."
+    },
+    "junior": {
+      "type": "string",
+      "title": "The junior's slot",
+      "description": "Which custom model the junior runs on in junior-lead mode",
+      "default": "alpha",
+      "options": [
+        "alpha",
+        "beta",
+        "gamma"
+      ]
+    },
+    "reviewer": {
+      "type": "string",
+      "title": "External reviewer",
+      "description": "Which external agent reviews in second-opinion and quality modes (its own CLI and login, not OpenRouter)",
+      "default": "codex",
+      "options": [
+        "codex",
+        "opencode"
+      ]
     }
   },
   "homepage": "https://github.com/Akramovic1/jev-pilot"

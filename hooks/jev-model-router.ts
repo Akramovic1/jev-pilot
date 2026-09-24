@@ -60,6 +60,9 @@ import { NOT_A_TASK, recentContext, signalsOf } from './context.ts'
 import { clearSkillNotes, resetBriefing, takeBriefing, takeSkill, turnLine } from './summary.ts'
 import { moodOf, say, setBoost, subagentLabel, turnSpeech } from './pet-art.ts'
 import { feature } from './features.ts'
+import { crewNote, JUNIOR_AGENT, juniorSlot, REVIEWERS, reviewerAgent, slotAlias, slotsOffered } from './crew.ts'
+import { crew, reviewerHealthy, router, slotHealthy } from './crew-state.ts'
+import { ensureCrew, startSession, type CrewIo } from './crew-run.ts'
 import type { ContextMessage } from './context.ts'
 import { appendEntry, configKeysOf, entriesOf, LEDGER_KEY, reportPrompt, suggestions, summarize } from './ledger.ts'
 import type { LedgerEntry, TunableConfig } from './ledger.ts'
@@ -89,7 +92,7 @@ import {
   route,
   TIER_ORDER,
 } from './model-router.policy.ts'
-import type { Miss } from './model-router.policy.ts'
+import type { Miss, SlotChoice } from './model-router.policy.ts'
 import type { Decision, Effort, PolicyConfig, Provider, StrategyConfig, Tier } from './model-router.policy.ts'
 
 /** Where decisions are asked, when a backend is configured. */
@@ -129,6 +132,8 @@ async function classify(
   withStrategy: boolean,
   what: string,
   subagent = false,
+  slots: readonly SlotChoice[] = [],
+  junior = false,
 ): Promise<{ decision: Decision | null; miss: Miss | null }> {
   if (!backend) return { decision: null, miss: null }
   try {
@@ -136,12 +141,12 @@ async function classify(
       io.fetch(backend.url, {
         method: 'POST',
         headers: requestHeaders(backend.provider, backend.apiKey, backend.modelId),
-        body: requestBody(backend.provider, state, backend.modelId, withStrategy, subagent),
+        body: requestBody(backend.provider, state, backend.modelId, withStrategy, subagent, slots, junior),
       }),
       io.sleep(backend.timeoutMs),
     ])
     if (response && response.ok) {
-      const decision = readDecision(response.text)
+      const decision = readDecision(response.text, slots.map((slot) => slot.name))
       return { decision, miss: decision ? null : 'error' }
     }
     const miss = missOf(response ? response.status : null)
@@ -324,6 +329,21 @@ export const register: Register = (on, options) => {
   // prompt. (The per-prompt lines follow once prompts arrive.)
   on('session.start', async ($, e, next) => {
     const result = await next(e)
+    // The crew: saved /jev changes, the router claude-jev started, the slots
+    // file it reads; then every worker's health, in the background.
+    const crewIo: CrewIo = {
+      fetch: (url, init) => $.http.fetch(url, init),
+      home: () => $.env.get('HOME'),
+      routerUrl: () => $.env.get('JEV_ROUTER_URL'),
+      write: (path, text) => $.fs.write(path, text),
+      run: (argv, timeoutMs) => $.process.run(argv, { timeoutMs }),
+      storeGet: (key) => $.store.get(key),
+      sleep: (ms) => $.clock.sleep(ms),
+      register: async (spec) => {
+        await $.agent.register(spec)
+      },
+    }
+    await startSession(crewIo, openrouterKey || null)
     announced = true
     if (lines) {
       $.ui.log(readyLine())
@@ -350,6 +370,19 @@ export const register: Register = (on, options) => {
       announced = true
       if (lines) $.ui.log(readyLine())
     }
+    const crewIo: CrewIo = {
+      fetch: (url, init) => $.http.fetch(url, init),
+      home: () => $.env.get('HOME'),
+      routerUrl: () => $.env.get('JEV_ROUTER_URL'),
+      write: (path, text) => $.fs.write(path, text),
+      run: (argv, timeoutMs) => $.process.run(argv, { timeoutMs }),
+      storeGet: (key) => $.store.get(key),
+      sleep: (ms) => $.clock.sleep(ms),
+      register: async (spec) => {
+        await $.agent.register(spec)
+      },
+    }
+    await ensureCrew(crewIo, openrouterKey || null)
     // Only the person's own tasks are classified. A notification, a peer's
     // message or a typed `/command` would otherwise take the pending slot and
     // leave the next real prompt's turn without its decision.
@@ -357,7 +390,7 @@ export const register: Register = (on, options) => {
     if (!isTask) return next(e)
     // Once per session, and again after a compaction: what jev-pilot does,
     // for the model, so it leaves those decisions to it.
-    const note = takeBriefing() ? capabilityNote(capabilities()) : null
+    const note = takeBriefing() ? capabilityNote(capabilities(), crewNote(crew(), juniorSlot(crew(), router() !== null), REVIEWERS.filter(reviewerHealthy))) : null
     const withNote = (input: typeof e, extra: string | null = null) => {
       const blocks = [extra, note].filter((b): b is string => b !== null)
       return blocks.length > 0 ? { ...input, context: [...(input.context ?? []), ...blocks] } : input
@@ -386,6 +419,13 @@ export const register: Register = (on, options) => {
         { prompt: e.text, recent_context: recent, signals: signalsOf(e.text, messages) },
         planning,
         'the turn',
+        false,
+        [],
+        // Junior-lead mode, with a junior answering its check: the junior is an option.
+        (() => {
+          const slot = juniorSlot(crew(), router() !== null)
+          return !!slot && slotHealthy(slot)
+        })(),
       ))
     } else {
       // No backend: the engine's own small-model classifier answers the same
@@ -767,6 +807,50 @@ export const register: Register = (on, options) => {
       $.ui.log(`[jev-model-router] provider "${forced}" has no key set; using the built-in classifier`)
     }
 
+    const crewIo: CrewIo = {
+      fetch: (url, init) => $.http.fetch(url, init),
+      home: () => $.env.get('HOME'),
+      routerUrl: () => $.env.get('JEV_ROUTER_URL'),
+      write: (path, text) => $.fs.write(path, text),
+      run: (argv, timeoutMs) => $.process.run(argv, { timeoutMs }),
+      storeGet: (key) => $.store.get(key),
+      sleep: (ms) => $.clock.sleep(ms),
+      register: async (spec) => {
+        await $.agent.register(spec)
+      },
+    }
+    await ensureCrew(crewIo, openrouterKey || null)
+
+    // A reviewer only relays to its CLI: the smallest model does.
+    if (REVIEWERS.some((r) => e.subagentType === reviewerAgent(r))) {
+      if (petOn()) {
+        say(`${subagentLabel(e.description, 'review')} → ${e.subagentType.replace(/^jev-pilot:|-review$/g, '')}`, 'focused')
+        $.ui.invalidate('ui.render')
+      }
+      return next({ ...e, model: policy.tiers.fast })
+    }
+
+    // The junior runs on its slot; with the slot down, on Sonnet instead.
+    if (e.subagentType === JUNIOR_AGENT) {
+      const slot = juniorSlot(crew(), router() !== null)
+      const model = slot && slotHealthy(slot) ? slotAlias(slot.name) : policy.tiers.balanced
+      if (petOn()) {
+        say(`${subagentLabel(e.description, 'junior')} → junior on ${model}`, 'focused')
+        $.ui.invalidate('ui.render')
+      }
+      if (lines) $.ui.log(`jev · junior on ${model}`)
+      return next({ ...e, model })
+    }
+
+    // Quality mode: Opus for every subagent, no cheaper models.
+    if (crew().mode === 'quality') {
+      if (verbose) $.ui.log(`[jev-model-router] ${e.subagentType}: quality mode, ${policy.tiers.deep}`)
+      return next({ ...e, model: policy.tiers.deep })
+    }
+
+    // The custom models Jev may choose here: this mode's, the router up, each
+    // one answering its last check.
+    const offered = slotsOffered(crew(), router() !== null).filter(slotHealthy)
     const startedAt = await $.clock.now()
     let decision: Decision | null = null
     if (active) {
@@ -779,6 +863,7 @@ export const register: Register = (on, options) => {
           false,
           'the subagent',
           true,
+          offered,
         )
       ).decision
     } else {
@@ -808,7 +893,15 @@ export const register: Register = (on, options) => {
     // The Agent tool takes no effort: that is set at the subagent's requests
     // (turn.step), from this same decision, kept by the id it starts with.
     const current = e.model ?? e.parentModel
-    const { model, reason } = route(decision, { model: current }, policy)
+    let { model, reason } = route(decision, { model: current }, policy)
+    // A custom model: moving down to it takes the same confidence as any
+    // cheaper model; the router sends `jev-<slot>` to it.
+    const slot = decision?.slot ? offered.find((choice) => choice.name === decision.slot) : undefined
+    if (slot) {
+      const sure = (decision?.confidence ?? 0) >= policy.minDowngradeConfidence
+      model = sure ? slotAlias(slot.name) : null
+      reason = sure ? `${slot.name}: ${slot.model} (confidence ${decision?.confidence?.toFixed(2)})` : `${slot.name} wanted, confidence ${decision?.confidence?.toFixed(2)} < ${policy.minDowngradeConfidence}`
+    }
     // Named by its task in the bubble and the log, not its generic type.
     const label = subagentLabel(e.description, e.subagentType)
     if (!model) {

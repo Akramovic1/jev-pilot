@@ -37,6 +37,12 @@ export interface Tiers {
 
 export interface Decision {
   tier: Tier
+  /**
+   * A custom model slot the decision model chose for a subagent (`alpha`,
+   * ...), when it was offered one. The tier then reads as `fast`, the
+   * cheapest, so every other rule works as for Claude's own models.
+   */
+  slot?: string
   /** Confidence in the tier, or null when the backend reported none. */
   confidence: number | null
   /** P(true) that carrying the task out would itself be costly or final. */
@@ -57,9 +63,11 @@ export interface Decision {
  * How a task is carried out: by the main conversation itself, by one
  * subagent, by several at once, or by a small graph of subagents in waves.
  */
-export type Strategy = 'direct' | 'delegate' | 'parallel' | 'graph'
+export type Strategy = 'direct' | 'delegate' | 'parallel' | 'graph' | 'junior'
 
 export const STRATEGY_ORDER: readonly Strategy[] = ['direct', 'delegate', 'parallel', 'graph']
+/** `junior` is offered only in junior-lead mode, with a junior to hand work to. */
+const ALL_STRATEGIES: readonly Strategy[] = [...STRATEGY_ORDER, 'junior']
 
 /**
  * How each strategy is described to the decision model. Written so that
@@ -75,6 +83,8 @@ const STRATEGY_CRITERIA: Record<Strategy, string> = {
     'Fan out, then join: several independent pieces with no shared files or state (separate modules, services or investigations), each done by its own subagent at the same time, then combined in one place.',
   graph:
     'Work one conversation would lose track of: parts that depend on each other in waves, or distinct specialties that hand off (build, then an independent review, then fixes), with results fanning in to be checked. Only for large builds; most work, even big work, is direct or parallel.',
+  junior:
+    'An easy coding change that is already well specified (which files, what behavior, a test or command that proves it): a cheaper junior model writes it, and the main conversation reviews the diff as the tech lead. Not for design, unclear bugs or risky changes.',
 }
 
 /**
@@ -213,12 +223,17 @@ export const EFFORT_CHOICES: Record<Effort, string> = Object.fromEntries(
   EFFORT_ORDER.map((level, index) => [level, EFFORT_RUBRIC[index] as string]),
 ) as Record<Effort, string>
 
-export function questions(provider: Provider, withStrategy = false, subagent = false): Record<string, unknown> {
+export function questions(provider: Provider, withStrategy = false, subagent = false, slots: readonly SlotChoice[] = [], junior = false): Record<string, unknown> {
+  // Custom models, when offered, take the cheap end: they replace Haiku as
+  // the choice for work with nothing to judge (offered beside it, Jev split
+  // its answer between the two), each saying when to choose it.
+  const tierCriteria: Record<string, string> = slots.length > 0 ? { balanced: TIER_CRITERIA.balanced, deep: TIER_CRITERIA.deep } : { ...TIER_CRITERIA }
+  for (const slot of slots) tierCriteria[slot.name] = `${slot.model} (a custom model, not Claude). ${slot.when}`
   const asked: Record<string, unknown> = {
     tier: {
       type: 'choice',
       instructions: 'Which is the cheapest tier that can complete this coding task well?',
-      criteria: TIER_CRITERIA,
+      criteria: tierCriteria,
     },
     effort: {
       type: 'choice',
@@ -246,7 +261,8 @@ export function questions(provider: Provider, withStrategy = false, subagent = f
       type: 'choice',
       instructions:
         'How should a coding assistant carry out the latest request, given the recent conversation? Prefer the simplest way that does it well.',
-      criteria: STRATEGY_CRITERIA,
+      // `junior` only when there is a junior to hand the work to.
+      criteria: junior ? STRATEGY_CRITERIA : Object.fromEntries(STRATEGY_ORDER.map((name) => [name, STRATEGY_CRITERIA[name]])),
     }
   }
   return asked
@@ -259,8 +275,10 @@ export function requestBody(
   model: string,
   withStrategy = false,
   subagent = false,
+  slots: readonly SlotChoice[] = [],
+  junior = false,
 ): string {
-  const asked = questions(provider, withStrategy, subagent)
+  const asked = questions(provider, withStrategy, subagent, slots, junior)
   const body = provider !== 'gateway' ? { model, state, questions: asked } : { state, questions: asked }
   return JSON.stringify(body)
 }
@@ -296,6 +314,13 @@ export function requestHeaders(
   }
 }
 
+/** A custom model offered as a choice: its slot name, the model, and when to choose it. */
+export interface SlotChoice {
+  name: string
+  model: string
+  when: string
+}
+
 function isTier(value: unknown): value is Tier {
   return value === 'fast' || value === 'balanced' || value === 'deep'
 }
@@ -309,7 +334,7 @@ function isTier(value: unknown): value is Tier {
  * a yes/no answer arrives as `probability`. Both are handled, and a missing
  * confidence reads as null rather than as a number the policy would trust.
  */
-export function readDecision(responseText: string): Decision | null {
+export function readDecision(responseText: string, slots: readonly string[] = []): Decision | null {
   let parsed: unknown
   try {
     parsed = JSON.parse(responseText)
@@ -321,7 +346,9 @@ export function readDecision(responseText: string): Decision | null {
   if (!answers || typeof answers !== 'object' || Array.isArray(answers)) return null
 
   const tierAnswer = answers.tier
-  if (!tierAnswer || !isTier(tierAnswer.choice)) return null
+  // A custom slot reads as the cheapest tier, with the slot named beside it.
+  const slot = tierAnswer && typeof tierAnswer.choice === 'string' && slots.includes(tierAnswer.choice) ? tierAnswer.choice : undefined
+  if (!tierAnswer || (!slot && !isTier(tierAnswer.choice))) return null
 
   const effortAnswer = answers.effort
   const riskyAnswer = answers.risky
@@ -353,7 +380,8 @@ export function readDecision(responseText: string): Decision | null {
     effortProbabilities = byName as Record<string, number>
   }
   return {
-    tier: tierAnswer.choice,
+    tier: slot ? 'fast' : (tierAnswer.choice as Tier),
+    ...(slot ? { slot } : {}),
     confidence: confidenceOf(tierAnswer),
     effort,
     effortConfidence: effortAnswer ? confidenceOf(effortAnswer) : null,
@@ -365,7 +393,7 @@ export function readDecision(responseText: string): Decision | null {
 }
 
 function isStrategy(value: unknown): value is Strategy {
-  return typeof value === 'string' && (STRATEGY_ORDER as readonly string[]).includes(value)
+  return typeof value === 'string' && (ALL_STRATEGIES as readonly string[]).includes(value)
 }
 
 /**
@@ -741,6 +769,11 @@ const STRATEGY_HOW: Record<Exclude<Strategy, 'direct'>, string> = {
     '- Bounds: at most 4 subagents at a time and 2 review rounds per wave; a failed node is redone alone, without touching the others\' work.',
     'If the graph cannot be explained in one breath, work directly instead.',
   ].join('\n'),
+  junior: [
+    'Junior and lead. Hand the coding to the jev-pilot:junior subagent (a cheaper model) with a self-contained brief: the files to change, the exact behavior, and the command that proves it. Do not write the code yourself first.',
+    'When it reports back, review it as the tech lead: read `git diff`, run the tests yourself, and check it did what was asked and nothing else.',
+    'If it falls short, send your findings back to the junior once (SendMessage), or fix small things yourself; do not rewrite what works.',
+  ].join('\n'),
 }
 
 /**
@@ -766,6 +799,10 @@ export function adviseStrategy(decision: Decision | null, config: StrategyConfig
   }
   if (strategy === 'parallel' && decision.tier === 'fast') {
     return { block: null, reason: 'parallel, but tier fast; not acted on' }
+  }
+  // Work that needs the deep tier is not a junior's: design, unclear causes, risk.
+  if (strategy === 'junior' && (decision.tier === 'deep' || (decision.risky ?? 0) > 0.5)) {
+    return { block: null, reason: `junior, but tier ${decision.tier}${(decision.risky ?? 0) > 0.5 ? ', risky' : ''}; not acted on` }
   }
 
   const how =
@@ -802,7 +839,7 @@ export interface Capabilities {
  * effort) nor tells the user jev-pilot cannot do what it does. Only the parts
  * switched on are named; null when none is.
  */
-export function capabilityNote(on: Capabilities): string | null {
+export function capabilityNote(on: Capabilities, crew: string[] = []): string | null {
   const does: string[] = []
   if (on.effort) {
     does.push(
@@ -821,7 +858,7 @@ export function capabilityNote(on: Capabilities): string | null {
   }
   if (on.skills) does.push('- attaches the one skill a request needs, if any')
   if (on.strategy) does.push('- may attach an <execution_strategy> block: advice to weigh, not an order')
-  if (does.length === 0) return null
+  if (does.length === 0 && crew.length === 0) return null
   const leave: string[] = []
   if (on.subagents) {
     leave.push(
@@ -833,9 +870,9 @@ export function capabilityNote(on: Capabilities): string | null {
   if (on.effort) leave.push("Don't change the effort yourself unless the user asks.")
   return [
     '<jev_pilot>',
-    'jev-pilot is running in this session. Before each turn, a fast decision model reads the request and:',
-    ...does,
+    ...(does.length > 0 ? ['jev-pilot is running in this session. Before each turn, a fast decision model reads the request and:', ...does] : ['jev-pilot is running in this session.']),
     ...leave,
+    ...crew,
     'The user switches any part on or off with /jev.',
     '</jev_pilot>',
   ].join('\n')

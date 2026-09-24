@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.0 — 2026-09-24
+
+**The crew.** Custom models and other coding agents in the same Claude Code session, used the way you choose.
+
+- **Custom models.** Three slots, `alpha`, `beta` and `gamma`, each holding any OpenRouter model (`alpha` starts as DeepSeek V4.1 Flash). Change one live with `/jev alpha <model>`. `claude-jev` starts **jev-router**, a local proxy that sends `jev-<slot>` requests to OpenRouter and everything else to Anthropic unchanged, so your Claude plan keeps working. It works with subagents and workflows. `JEV_ROUTER=off` starts without it.
+- **Modes** (`/jev mode`): `standard` (Claude only, the default), `budget` (custom models take subagent work that needs no judgment), `junior-lead` (a junior on a custom model writes easy code, and Opus reviews its diff and runs the tests), `second-opinion` (an external agent reviews significant changes), and `quality` (Opus for every subagent, plus the external review).
+- **Codex and OpenCode as reviewers.** `jev-pilot:codex-review` and `jev-pilot:opencode-review` run your own `codex` and `opencode` CLIs, read-only, and bring back P1/P2/P3 findings and a verdict. Claude uses them after significant changes in `second-opinion` and `quality` modes, or whenever you ask.
+- **Health checks.** `/jev status` shows every worker: the router, each custom model (a 1-token request), Codex (logged in) and OpenCode (a provider logged in). Only workers that pass are used, and each has a fallback: Sonnet for a junior whose model is down, and the other reviewer.
+- **The model is told about the crew.** The note Claude gets once per session names the mode, the junior and the working reviewers, and it's sent again after a `/jev` change.
+- A mid-session plugin reload no longer loses the crew. It's set up again on first use.
+
 ## 0.4.14 — 2026-09-24
 
 - **Mechanical work across many files is low.** "A rename" sat under low but "a change across several files" under high, so a rename across three files, or a search, went to high. Low now names mechanical work across many files (a rename or find-and-replace, a search that lists what it finds), and high is a change across several files *that needs working out*. On jev-bench, rename and search went from high to low.
