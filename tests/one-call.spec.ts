@@ -122,3 +122,22 @@ test('only a plain "go on" skips Jev; approvals and anything longer are asked', 
   for (const text of ['yes', 'go ahead', 'do it', 'ok', 'proceed', 'continue with the tests', 'continue?', 'fix all and continue'])
     expect(isContinuation(text)).toBe(false)
 })
+
+// ---- a platform's skill only for a project on that platform --------------------------
+
+test('what a project deploys with is read from its file names, top folder and one level down', async () => {
+  const { platformsOf } = await import('../hooks/context.ts')
+  // The aip layout: AWS CDK in infra/, Dockerfiles in apps/.
+  expect(platformsOf(['apps/', 'infra/', 'package.json', 'infra/cdk.json', 'infra/lib/', 'apps/api/', 'apps/Dockerfile'])).toBe('AWS CDK, Docker')
+  expect(platformsOf(['vercel.json', 'package.json'])).toBe('Vercel')
+  expect(platformsOf(['.vercel/', 'src/'])).toBe('Vercel')
+  expect(platformsOf(['supabase/config.toml', '.github/workflows/'])).toBe('Supabase, GitHub Actions')
+  expect(platformsOf(['src/', 'README.md'])).toBe('none found')
+  // Contents never matter, only names: a file merely mentioning vercel is nothing.
+  expect(platformsOf(['docs/vercel-notes.md'])).toBe('none found')
+})
+
+test('the skill question says a platform skill fits only the platform in use', () => {
+  expect(WHICH_INSTRUCTIONS).toContain('project_platforms')
+  expect(WHICH_INSTRUCTIONS).toContain('fits only when')
+})

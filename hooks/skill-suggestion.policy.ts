@@ -512,10 +512,13 @@ export const NO_SKILL_CRITERION =
 /**
  * Asked to match the kind of work, a failing test goes to a debugging skill
  * rather than to a skill named after the library it happens to mention (it
- * went to `queues` for a job-queue test before).
+ * went to `queues` for a job-queue test before). A platform's skill must
+ * match the platform in use: "deploy to production" in an AWS CDK project
+ * went to Vercel's deploy skill (0.90) before; with the project's platforms
+ * in the state, no skill (Vercel projects and "deploy to Vercel" keep it).
  */
 export const WHICH_INSTRUCTIONS =
-  "Which of these skills, if any, is the right one to load to help with the user's latest request? Match the kind of work the request asks for (such as debugging a failure, planning, reviewing, designing, writing a document), not only a product or technology it names."
+  "Which of these skills, if any, is the right one to load to help with the user's latest request? Match the kind of work the request asks for (such as debugging a failure, planning, reviewing, designing, writing a document), not only a product or technology it names. A skill for one product or platform (Vercel, Supabase, AWS, Firebase, Stripe…) fits only when the request, the conversation or the project (project_platforms in the state: what its files show it uses) shows that product is the one in use here; otherwise choose a general skill or none."
 
 /** A choice this sure of one skill picks it whatever the gate says. */
 export const SURE_PICK = 0.5

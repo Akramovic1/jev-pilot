@@ -56,7 +56,7 @@
  * key belongs to.
  */
 import type { HttpInit, HttpResponse, Register } from 'claude-code'
-import { NOT_A_TASK, recentContext, signalsOf } from './context.ts'
+import { NOT_A_TASK, platformsOf, recentContext, signalsOf, SKIPPED_DIRS } from './context.ts'
 import { clearSkillNotes, resetBriefing, takeBriefing, takeSkill, turnLine } from './summary.ts'
 import { moodOf, say, setBoost, subagentLabel, turnSpeech } from './pet-art.ts'
 import { feature } from './features.ts'
@@ -353,6 +353,8 @@ export const register: Register = (on, options) => {
   let failedInARow = 0
   // Said once: a custom model asked for with no router to serve it.
   let warnedNoRouter = false
+  // What the project deploys with, found once per project folder.
+  let platformCache: { cwd: string; text: string } | null = null
   // The turn id of the ledger entry this session finished last: the next
   // prompt says whether it was right.
   let lastEntryId: string | null = null
@@ -541,7 +543,28 @@ export const register: Register = (on, options) => {
         const slot = juniorSlot(crew(), router() !== null)
         return !!slot && slotUsable(slot)
       })()
-      const state = { prompt: e.text, recent_context: recent, signals: signalsOf(e.text, messages) }
+      // What the project deploys with, from its file names (once per folder):
+      // a platform's skill fits only a project on that platform.
+      let platforms = platformCache
+      try {
+        const cwd = await $.session.cwd()
+        if (platforms?.cwd !== cwd) {
+          const paths: string[] = []
+          const top = await $.fs.list(cwd)
+          for (const entry of top) paths.push(entry.kind === 'dir' ? `${entry.name}/` : entry.name)
+          const dirs = top.filter((entry) => entry.kind === 'dir' && !SKIPPED_DIRS.has(entry.name)).slice(0, 60)
+          for (const dir of dirs) {
+            for (const entry of await $.fs.list(`${cwd}/${dir.name}`).catch(() => [])) {
+              paths.push(`${dir.name}/${entry.kind === 'dir' ? `${entry.name}/` : entry.name}`)
+            }
+          }
+          platforms = { cwd, text: platformsOf(paths) }
+          platformCache = platforms
+        }
+      } catch {
+        platforms = null
+      }
+      const state = { prompt: e.text, recent_context: recent, signals: signalsOf(e.text, messages), ...(platforms ? { project_platforms: platforms.text } : {}) }
       let settled = false
       let settledBlock: string | null = null
       const part: RouterPart = {

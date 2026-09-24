@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.1 — 2026-09-24
+
+- **A platform's skill only for a project on that platform.** "Deploy to production" in an AWS CDK project got Vercel's deploy skill attached, because the skill question matched the kind of work (deploying) and nothing said which platform the project uses. jev-pilot now reads what the project deploys with from its file names (`cdk.json`, `vercel.json`, `netlify.toml`, `firebase.json`, `supabase/config.toml`, `Dockerfile`, `.github/workflows/`…, in the top folder and one level down, once per project, never file contents), and Jev is told that a platform's skill fits only when the request, the conversation or the project shows that platform is in use. Measured on 6 cases: an AWS project deploying (with and without the conversation), no skill, where Vercel's was picked at 0.90 before; a Vercel project, or "deploy to Vercel", keep Vercel's; with nothing known, no guess; a Supabase project keeps the Supabase skill. Checked live in an AWS CDK project: no skill.
+
 ## 0.9.0 — 2026-09-24
 
 **Better code, not just cheaper.** Jev can't judge code, since it never sees your repo, but it can judge the request. The same one request (no extra wait) now also asks four questions, and each acts only when Jev is sure:

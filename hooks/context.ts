@@ -156,3 +156,47 @@ export function signalsOf(prompt: string, messages: readonly ContextMessage[], w
     recent_tools: tools,
   }
 }
+
+// ---- what the project deploys with ------------------------------------------------------
+
+/**
+ * The files that show which platform a project deploys to or builds on, by
+ * what they're called. Read from the project's top folder and one level down
+ * (infra/cdk.json, apps/api/Dockerfile), never their contents.
+ */
+const PLATFORM_MARKERS: [RegExp, string][] = [
+  [/(^|\/)vercel\.json$|(^|\/)\.vercel\/$/, 'Vercel'],
+  [/(^|\/)cdk\.json$/, 'AWS CDK'],
+  [/(^|\/)serverless\.(yml|yaml|ts|js)$/, 'AWS Serverless'],
+  [/(^|\/)template\.ya?ml$|(^|\/)samconfig\.toml$/, 'AWS SAM'],
+  [/(^|\/)buildspec\.ya?ml$/, 'AWS CodeBuild'],
+  [/(^|\/)amplify\.ya?ml$|(^|\/)amplify\/$/, 'AWS Amplify'],
+  [/(^|\/)netlify\.toml$/, 'Netlify'],
+  [/(^|\/)firebase\.json$/, 'Firebase'],
+  [/(^|\/)supabase\/config\.toml$/, 'Supabase'],
+  [/(^|\/)fly\.toml$/, 'Fly.io'],
+  [/(^|\/)wrangler\.(toml|json|jsonc)$/, 'Cloudflare Workers'],
+  [/(^|\/)app\.ya?ml$|(^|\/)cloudbuild\.ya?ml$/, 'Google Cloud'],
+  [/(^|\/)render\.ya?ml$/, 'Render'],
+  [/(^|\/)railway\.(json|toml)$/, 'Railway'],
+  [/(^|\/)(docker-)?compose\.ya?ml$/, 'Docker Compose'],
+  [/(^|\/)Dockerfile$/, 'Docker'],
+  [/(^|\/)\.github\/workflows\/$/, 'GitHub Actions'],
+  [/(^|\/)bitbucket-pipelines\.yml$/, 'Bitbucket Pipelines'],
+]
+
+/** Folders never looked into for platform files: dependencies and build output. */
+export const SKIPPED_DIRS = new Set(['node_modules', '.git', 'dist', 'build', '.next', 'out', 'cdk.out', 'vendor', 'target', '.venv', 'venv', '__pycache__', 'coverage'])
+
+/**
+ * What a project deploys to or builds on, from its file names (folders end
+ * in "/"): "AWS CDK, Docker", or "none found". Jev reads it so a platform's
+ * skill (Vercel's, say) fits only a project that uses that platform.
+ */
+export function platformsOf(paths: readonly string[]): string {
+  const found: string[] = []
+  for (const [marker, name] of PLATFORM_MARKERS) {
+    if (!found.includes(name) && paths.some((path) => marker.test(path))) found.push(name)
+  }
+  return found.length > 0 ? found.join(', ') : 'none found'
+}

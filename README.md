@@ -171,7 +171,7 @@ flowchart LR
 
 Advice is attached only when Jev is confident (0.6, or 0.8 for `graph`) and it agrees with the tier. Claude may ignore it.
 
-**Skills.** At most one per prompt. Jev reads every skill's description and the opening of its `SKILL.md`, next to a "none of these fits" option, and is asked to match the kind of work (debugging, planning, reviewing…), not a product the prompt happens to name. A skill is picked when Jev is sure of it, or when the prompt needs a skill and it still fits. The winner's `SKILL.md` is added to the prompt.
+**Skills.** At most one per prompt. Jev reads every skill's description and the opening of its `SKILL.md`, next to a "none of these fits" option, and is asked to match the kind of work (debugging, planning, reviewing…), not a product the prompt happens to name. A skill for one platform (Vercel, Supabase, Firebase…) is picked only when the request, the conversation or the project uses that platform: jev-pilot reads what the project deploys with from its file names (`cdk.json`, `vercel.json`, `Dockerfile`…), so "deploy to production" in an AWS project doesn't get Vercel's deploy skill. A skill is picked when Jev is sure of it, or when the prompt needs a skill and it still fits. The winner's `SKILL.md` is added to the prompt.
 
 **Better code, not just cheaper.** The same request also asks Jev what would make the work better. Jev can't judge code, since it never sees your repo, but it can judge the request. Each read acts only when Jev is sure:
 
