@@ -23,6 +23,8 @@ A tiny shop backend in `fixture/` (about 20 files). Each task has a prompt and a
 | `6-discount` | hard | fix discount codes to follow the shop's rules: rounding, best code, order, minimums (four bugs) | the tests pass, untouched, and the cart tests still do |
 | `7-currency` | easy | add an optional currency argument to `invoice()` | a hidden test of the new argument, and the cart tests |
 | `8-validate` | medium | validate `createUser` input and write tests for it | a hidden test of every rule, and the tests it wrote pass |
+| `9-vague` | quality | "add caching to getProfile", which leaves real choices open (lifetime, invalidation on `setPlan`, size) | the answer asks about them or states what it assumed |
+| `10-transfer` | quality | "transfer() let an account go below zero, fix it": the cause is a negative amount, and there are other holes | hidden tests: negative, fractional and non-number amounts refused, same-account transfer changes nothing |
 
 ## The setups
 
@@ -45,3 +47,4 @@ Eight tasks and one run each is a reading, not a verdict: a single lucky or unlu
 | 2026-09-24 | 0.4.13 | 4/4 / 4/4 | $1.08 / $1.08 | rename and search went to high: mechanical work read as "a change across several files" |
 | 2026-09-24 | 0.4.14 | 4/4 / 4/4 | $1.09 / **$1.01** | rename and search now low (−11%, −26%); slugify medium (−12%); the flaky bug xhigh (+17%, more thinking where it's needed) |
 | 2026-09-24 | 0.6.0 | 8/8 / 8/8 | $2.20 / **$1.92** | eight tasks: jev cheaper on 7 (−3% to −18%), dearer on the flaky bug (+15%, xhigh). **junior** (junior-lead mode, 4 coding tasks): 4/4 for $1.02 against $0.90 for jev and $1.11 for off; DeepSeek's share under 1¢ a task, but the lead's review costs about what writing did at this size |
+| 2026-09-24 | 0.9.0 | quality tasks: 4/4 / 4/4 | $1.23 / **$1.09** | `9-vague` and `10-transfer`, 2 runs each: Opus 5.5 settled the open choices out loud and covered the transfer edge cases with or without jev-pilot's quality advice, so these tasks don't separate the setups (9-vague first scored 0/4 on both from a check that only looked for "assume" or a question mark; re-checked on the saved answers with the corrected check) |

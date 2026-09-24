@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.9.0 — 2026-09-24
+
+**Better code, not just cheaper.** Jev can't judge code, since it never sees your repo, but it can judge the request. The same one request (no extra wait) now also asks four questions, and each acts only when Jev is sure:
+
+- **Vague request** ("add caching", "make it better"; 85% bar): Claude is told to ask one short question, or state its assumption in one line, before coding.
+- **A bug** (80%): show it first with a failing test or a command, then fix it and show the same check passing.
+- **A costly area** such as money, auth, migrations or security (80%): run the tests that cover it and add one for the changed case, and get a Codex or OpenCode review when one is working.
+- **Your correction of the last turn** ("it doesn't work", "not what I asked"; 70%): that turn is marked in the ledger. This is jev-pilot's first real quality signal. `/jev-pilot:report` shows how often each starting effort got corrected, and `/jev tune` leans up when cheap starts keep getting corrected. It's how you find out whether low effort is really enough for your work.
+- **A turn going in circles:** the same file edited 4 times, or the same command failing 3 times in a turn. Claude gets a note after that tool call (you don't see it) to step back, read the error in full, name the cause and try something else, and the effort goes up a level once. Before, only failures back to back raised it, and the edit, test, edit, test loop never does that.
+- The questions were measured on sample prompts before use. A first wording rated "add a dark mode toggle" as vague as "add caching"; the final one separates them (0.19 against 0.86). `/jev quality off` switches all of it off.
+- **jev-bench: two quality tasks.** A vague request (`9-vague`) and a money bug with hidden edge-case tests (`10-transfer`). Honest result: Opus 5.5 already did the right thing on both, with or without jev-pilot (4/4 each; jev-pilot 11% cheaper). On these tasks the advice didn't change the outcome. It's a safety net for the cases where it would, and the correction marks will show over time whether it helps on your own work.
+- Reviewed by Codex (5 findings fixed, then PASS). Corrections mark a turn by the engine's own turn id, never by time. A command's count starts again after it passes. Quality reads still run when effort, model and strategy are all off.
+
 ## 0.8.2 — 2026-09-24
 
 **Choose the model Codex and OpenCode review with.**

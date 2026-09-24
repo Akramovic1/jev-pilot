@@ -64,11 +64,12 @@ import { crewNote, JUNIOR_AGENT, juniorSlot, REVIEWERS, reviewerAgent, slotAlias
 import { crew, reviewerHealthy, router, slotUsable } from './crew-state.ts'
 import { ensureCrew, newFallbacks, startSession, type CrewIo } from './crew-run.ts'
 import { isContinuation, offerPart, stillOffered, type RouterPart } from './jev-call.ts'
-import { recordSubagent, recordSubagentUsage, recordTurn, resetStats, shortStats } from './session-stats.ts'
+import { recordCorrection, recordSubagent, recordSubagentUsage, recordTurn, resetStats, shortStats } from './session-stats.ts'
 import type { ContextMessage } from './context.ts'
-import { appendEntry, configKeysOf, entriesOf, LEDGER_KEY, reportPrompt, suggestions, summarize } from './ledger.ts'
+import { appendEntry, configKeysOf, entriesOf, LEDGER_KEY, markCorrected, reportPrompt, suggestions, summarize } from './ledger.ts'
 import { dueToPropose, effective, initTuning, setTuning, TUNING_KEY, tuningLoaded, tuningOf } from './tuning.ts'
 import type { LedgerEntry, TunableConfig } from './ledger.ts'
+import { QUALITY_BARS, qualityAdvice, spinOf, stepBackNote } from './model-router.policy.ts'
 import {
   adviseStrategy,
   EFFORT_ORDER,
@@ -138,13 +139,14 @@ async function askJev(
   slots: readonly SlotChoice[] = [],
   junior = false,
   extra: Record<string, unknown> = {},
+  quality = false,
 ): Promise<{ text: string | null; miss: Miss | null }> {
   try {
     const response = await Promise.race([
       io.fetch(backend.url, {
         method: 'POST',
         headers: requestHeaders(backend.provider, backend.apiKey, backend.modelId),
-        body: requestBody(backend.provider, state, backend.modelId, withStrategy, subagent, slots, junior, extra),
+        body: requestBody(backend.provider, state, backend.modelId, withStrategy, subagent, slots, junior, extra, quality),
       }),
       io.sleep(backend.timeoutMs),
     ])
@@ -302,6 +304,7 @@ export const register: Register = (on, options) => {
     skills: feature('skills'),
     strategy: suggestStrategy(),
     model: routeMainModel(),
+    quality: feature('quality'),
   })
 
   const backend: Backend | null = active ? { provider: active, url, apiKey, modelId, timeoutMs } : null
@@ -350,6 +353,15 @@ export const register: Register = (on, options) => {
   let failedInARow = 0
   // Said once: a custom model asked for with no router to serve it.
   let warnedNoRouter = false
+  // The turn id of the ledger entry this session finished last: the next
+  // prompt says whether it was right.
+  let lastEntryId: string | null = null
+  // A turn going in circles: each file's edits and each command's runs in
+  // the turn, and whether that was already said.
+  const edits = new Map<string, number>()
+  const runs = new Map<string, number>()
+  let spinning: string | null = null
+  let spunTurnId: string | undefined
   // The last decision Jev made for a typed prompt: "continue" goes on with it.
   let lastDecision: Decision | null = null
   // Each family's current full id, learned from the requests the engine makes.
@@ -437,7 +449,7 @@ export const register: Register = (on, options) => {
       const blocks = [extra, note].filter((b): b is string => b !== null)
       return blocks.length > 0 ? { ...input, context: [...(input.context ?? []), ...blocks] } : input
     }
-    if (!routeMainLoop() && !suggestStrategy()) {
+    if (!routeMainLoop() && !suggestStrategy() && !feature('quality')) {
       const passed = await next(withNote(e))
       if (passed.drop && note) resetBriefing()
       return passed
@@ -463,10 +475,35 @@ export const register: Register = (on, options) => {
         $.ui.log(`[jev-model-router] jev: ${reused ? 'continuing, the last decision kept' : describeDecision(decision, ms, margin)}${read}`)
       }
       let block: string | null = null
+      let advisedStrategy = false
       if (planning && !reused) {
         const advice = adviseStrategy(decision, strategyConfig)
         block = advice.block
+        advisedStrategy = block !== null
         if (verbose) $.ui.log(`[jev-model-router] strategy: ${block ? 'advising ' : ''}${advice.reason}`)
+      }
+      // What makes the work better: ask first, test the bug first, check a costly change.
+      if (feature('quality') && !reused) {
+        const working = REVIEWERS.filter(reviewerHealthy)
+        const reviewer = working.includes(crew().reviewer) ? crew().reviewer : (working[0] ?? null)
+        const quality = qualityAdvice(decision, reviewer ? reviewerAgent(reviewer) : null)
+        if (quality) {
+          block = [block, quality].filter((b): b is string => b !== null).join('\n\n')
+          if (verbose) $.ui.log(`[jev-model-router] quality: ${quality.split('\n').filter((l) => l.startsWith('- ')).map((l) => l.slice(2, 40)).join(' · ')}`)
+        }
+      }
+      // Your reply said the last turn got it wrong: that turn is marked in the
+      // ledger, which is how jev-pilot learns where too little effort costs you.
+      if (!reused && typeof decision?.corrects === 'number' && lastEntryId !== null) {
+        const id = lastEntryId
+        lastEntryId = null
+        const corrected = decision.corrects >= QUALITY_BARS.corrects
+        if (corrected) recordCorrection()
+        try {
+          await $.store.set(LEDGER_KEY, markCorrected(await $.store.get(LEDGER_KEY), id, corrected))
+        } catch (error) {
+          if (verbose) $.ui.log(`[jev-model-router] could not mark the last turn: ${String(error)}`)
+        }
       }
       const draft: Draft = {
         answered: decision !== null,
@@ -477,7 +514,7 @@ export const register: Register = (on, options) => {
         effortConfidence: decision?.effortConfidence ?? null,
         strategy: reused ? null : (decision?.strategy ?? null),
         strategyConfidence: reused ? null : (decision?.strategyConfidence ?? null),
-        advised: block !== null,
+        advised: advisedStrategy,
       }
       pending.put({ decision, prompt: e.text, draft, miss })
       return block
@@ -510,7 +547,7 @@ export const register: Register = (on, options) => {
       const part: RouterPart = {
         prompt: e.text,
         ask: async (extra) => {
-          const asked = await askJev(io, backend, state, planning, 'the turn', false, [], junior, extra)
+          const asked = await askJev(io, backend, state, planning, 'the turn', false, [], junior, extra, feature('quality'))
           return { ...asked, ms: (await $.clock.now()) - startedAt }
         },
         // Once: a second settle (never expected) gets the first one's block.
@@ -609,7 +646,10 @@ export const register: Register = (on, options) => {
     if (e.index > 0 && e.turnId === appliedTurnId) {
       if (routeMainEffort() && feature('raise') && escalateAfterErrors > 0 && escalatedTurnId !== e.turnId) {
         const failed = failedInARow
-        if (failed >= escalateAfterErrors) {
+        // Going in circles counts as struggling too, however the calls ended.
+        const circling = spinning
+        if (failed >= escalateAfterErrors || circling) {
+          spinning = null
           escalatedTurnId = e.turnId
           const effort = applied?.effort ?? e.effort
           const turn = current
@@ -628,29 +668,29 @@ export const register: Register = (on, options) => {
                       prompt,
                       recent_context: recentContext(messages, prompt, contextLimits),
                       signals: signalsOf(prompt, messages),
-                      trouble: `${failed} tool calls in a row have failed while working on this request`,
+                      trouble: circling ?? `${failed} tool calls in a row have failed while working on this request`,
                     },
                     false,
                     'the effort',
                   )
                 ).decision
           const level = reread ? effortScoreOf(reread, margin) : null
-          const raised = escalate(effort, failed, escalateAfterErrors, level, raisedCeiling)
+          const raised = escalate(effort, Math.max(failed, circling ? escalateAfterErrors : 0), escalateAfterErrors, level, raisedCeiling)
           if (raised) {
             applied = { ...(applied ?? {}), effort: raised }
             if (turn && turn.turnId === e.turnId) turn.raisedTo = raised
             if (lines) {
               $.ui.log(
                 verbose
-                  ? `[jev-model-router] main loop → effort ${raised}: ${failed} tool calls failed in a row`
-                  : `jev · ${failed} failed in a row → effort ${raised}`,
+                  ? `[jev-model-router] main loop → effort ${raised}: ${circling ?? `${failed} tool calls failed in a row`}`
+                  : `jev · ${circling ? 'going in circles' : `${failed} failed in a row`} → effort ${raised}`,
               )
               $.ui.status(`jev · struggling → ${raised}`)
             }
             if (petOn()) {
               // At max, the pilot pulls its goggles down for the rest of the turn.
               if (raised === 'max') setBoost(true)
-              say(`${failed} fails → ${raised} ✈`, raised === 'max' ? 'boost' : moodOf(raised))
+              say(`${circling ? 'circles' : `${failed} fails`} → ${raised} ✈`, raised === 'max' ? 'boost' : moodOf(raised))
               $.ui.invalidate('ui.render')
             }
           } else if (verbose) {
@@ -671,6 +711,10 @@ export const register: Register = (on, options) => {
 
     // A new turn: failures of the last one say nothing about this one.
     failedInARow = 0
+    edits.clear()
+    runs.clear()
+    spinning = null
+    spunTurnId = undefined
     const taken = pending.take()
     const decision = taken?.decision ?? null
     turnPrompt = taken?.prompt ?? null
@@ -790,6 +834,20 @@ export const register: Register = (on, options) => {
         current.toolCalls++
         current.failures = Math.max(current.failures, failedInARow)
       }
+      // Going in circles: the same file edited again and again, or the same
+      // command run again and failing. Said once a turn, to the model only.
+      const input = e as unknown as { tool?: string; file_path?: unknown; command?: unknown }
+      const circle = spinOf(input, !!result.isError, edits, runs)
+      if (circle && feature('quality') && current && spunTurnId !== current.turnId) {
+        spunTurnId = current.turnId
+        spinning = circle
+        if (verbose) $.ui.log(`[jev-model-router] going in circles: ${circle}`)
+        if (petOn()) {
+          say('going in circles · stepping back', 'alert')
+          $.ui.invalidate('ui.render')
+        }
+        return { ...result, context: [...(result.context ?? []), stepBackNote(circle)] } as typeof result
+      }
     }
     return result
   })
@@ -817,7 +875,7 @@ export const register: Register = (on, options) => {
       }
     }
     if (!e.agentId && current && current.turnId === e.turnId) {
-      const { turnId: _turnId, ...entry } = current
+      const { turnId, ...entry } = current
       current = null
       // Every tenth turn, the bubble says what the session came to.
       const turns = recordTurn(entry.startedFrom, entry.started)
@@ -827,6 +885,7 @@ export const register: Register = (on, options) => {
       }
       const finished: LedgerEntry = {
         ...entry,
+        id: turnId,
         outcome: e.reason,
         durationMs: e.durationMs,
         outputTokens: e.usage?.output_tokens ?? null,
@@ -834,6 +893,7 @@ export const register: Register = (on, options) => {
       try {
         const entries = appendEntry(await $.store.get(LEDGER_KEY), finished)
         await $.store.set(LEDGER_KEY, entries)
+        lastEntryId = turnId
         // Every 20 turns: what the ledger now suggests, in one line.
         const found = dueToPropose(entries)
         if (found.length > 0) {
@@ -860,6 +920,8 @@ export const register: Register = (on, options) => {
     resetBriefing()
     resetStats()
     lastDecision = null
+    lastEntryId = null
+    spunTurnId = undefined
     subagents.clear()
     subagentEffort.clear()
     clearSkillNotes()

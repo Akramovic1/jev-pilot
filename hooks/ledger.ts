@@ -36,6 +36,18 @@ export interface LedgerEntry {
   outcome: string | null
   durationMs: number | null
   outputTokens: number | null
+  /** The engine's own id for the turn: what a correction marks it by (absent on entries from before 0.9). */
+  id?: string
+  /**
+   * Whether your next message said this turn got it wrong ("it doesn't work",
+   * "not what I asked"), as Jev read it; absent until the next prompt.
+   */
+  corrected?: boolean
+}
+
+/** The ledger with the one entry of turn `id` marked as corrected or not. */
+export function markCorrected(stored: unknown, id: string, corrected: boolean): LedgerEntry[] {
+  return entriesOf(stored).map((entry) => (entry.id !== undefined && entry.id === id ? { ...entry, corrected } : entry))
 }
 
 /** The most entries kept; the oldest go first. */
@@ -129,15 +141,16 @@ export function suggestions(entries: readonly LedgerEntry[], config: TunableConf
   }
 
   // Turns started low that had to be raised: the start was too cheap.
+  // Trouble at a cheap start: raised mid-turn, or corrected by your next message.
   const startedLow = entries.filter((entry) => entry.started === 'low' || entry.started === 'medium')
-  const raisedLow = startedLow.filter((entry) => entry.raisedTo !== null).length
+  const raisedLow = startedLow.filter((entry) => entry.raisedTo !== null || entry.corrected === true).length
   if (startedLow.length >= 10 && raisedLow / startedLow.length > 0.2) {
     if (config.minDowngradeConfidence < 0.9) {
       found.push({
         option: 'minDowngradeConfidence',
         from: config.minDowngradeConfidence,
         to: round2(Math.min(0.9, config.minDowngradeConfidence + 0.1)),
-        why: `${share(raisedLow, startedLow.length)} of turns started at low or medium effort had to be raised mid-turn`,
+        why: `${share(raisedLow, startedLow.length)} of turns started at low or medium effort had to be raised mid-turn or were corrected by you`,
       })
     }
     if (config.effortCloseMargin < 0.3) {
@@ -154,7 +167,7 @@ export function suggestions(entries: readonly LedgerEntry[], config: TunableConf
   // Turns started at high that turned out easy: high takes a surer answer.
   const atHigh = entries.filter((entry) => entry.started === 'high')
   const easyAtHigh = atHigh.filter(
-    (entry) => entry.raisedTo === null && entry.failures === 0 && entry.toolCalls <= 2 && entry.outcome === 'answer',
+    (entry) => entry.raisedTo === null && entry.failures === 0 && entry.toolCalls <= 2 && entry.outcome === 'answer' && entry.corrected !== true,
   ).length
   const raisedUp = found.some((suggestion) => suggestion.option === 'minDowngradeConfidence')
   if (atHigh.length >= 10 && easyAtHigh / atHigh.length > 0.6 && config.minHighConfidence < 0.8 && !raisedUp) {
@@ -168,7 +181,7 @@ export function suggestions(entries: readonly LedgerEntry[], config: TunableConf
 
   const startedHigh = entries.filter((entry) => entry.started === 'xhigh' || entry.started === 'max')
   const easyHigh = startedHigh.filter(
-    (entry) => entry.raisedTo === null && entry.failures === 0 && entry.toolCalls <= 2 && entry.outcome === 'answer',
+    (entry) => entry.raisedTo === null && entry.failures === 0 && entry.toolCalls <= 2 && entry.outcome === 'answer' && entry.corrected !== true,
   ).length
   // Evidence pointing both ways is no evidence: then the margin stays.
   const marginUp = found.some((suggestion) => suggestion.option === 'effortCloseMargin')
@@ -199,8 +212,8 @@ export function summarize(entries: readonly LedgerEntry[], config: TunableConfig
     '',
     `Jev answered ${share(answered.length, entries.length)} of turns; latency median ${percentile(latencies, 0.5) ?? '—'} ms, 90th percentile ${percentile(latencies, 0.9) ?? '—'} ms.`,
     '',
-    '| Started at | Turns | Raised mid-turn | Avg tool calls | Avg output tokens |',
-    '|---|---|---|---|---|',
+    '| Started at | Turns | Raised mid-turn | Corrected by you | Avg tool calls | Avg output tokens |',
+    '|---|---|---|---|---|---|',
   ]
   for (const level of LEVELS) {
     const here = entries.filter((entry) => entry.started === level)
@@ -212,10 +225,13 @@ export function summarize(entries: readonly LedgerEntry[], config: TunableConfig
       withTokens.length === 0
         ? '—'
         : String(Math.round(withTokens.reduce((sum, entry) => sum + (entry.outputTokens as number), 0) / withTokens.length))
-    lines.push(`| ${level} | ${here.length} | ${share(raised, here.length)} | ${tools.toFixed(1)} | ${tokens} |`)
+    // Only turns followed by another prompt could be judged.
+    const judged = here.filter((entry) => typeof entry.corrected === 'boolean')
+    const corrected = judged.filter((entry) => entry.corrected).length
+    lines.push(`| ${level} | ${here.length} | ${share(raised, here.length)} | ${judged.length > 0 ? `${share(corrected, judged.length)} of ${judged.length}` : '—'} | ${tools.toFixed(1)} | ${tokens} |`)
   }
   const unset = entries.filter((entry) => entry.started === null).length
-  if (unset > 0) lines.push(`| (not set) | ${unset} | | | |`)
+  if (unset > 0) lines.push(`| (not set) | ${unset} | | | | |`)
 
   const advised = entries.filter((entry) => entry.advised)
   if (advised.length > 0) {

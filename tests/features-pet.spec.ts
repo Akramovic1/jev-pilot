@@ -11,7 +11,7 @@ import {
 } from '../hooks/features.ts'
 import { type Act, actOfTool, BODY_W, CANVAS_H, subagentLabel, PALETTE, SCARF_CYCLE, CANVAS_W, PLAY_FRAMES, PLAYS, scenePixels, sceneRows, turnSpeech } from '../hooks/pet-art.ts'
 
-const allOn = { effort: true, raise: true, subagents: true, skills: true, strategy: true, model: false, pet: true }
+const allOn = { effort: true, raise: true, subagents: true, skills: true, strategy: true, quality: true, model: false, pet: true }
 
 // --- the switches ------------------------------------------------------------------
 

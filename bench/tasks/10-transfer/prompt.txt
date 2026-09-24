@@ -1,0 +1,1 @@
+In production, transfer() in src/transfer.ts let an account end up below zero. Fix it.

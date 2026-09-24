@@ -1,0 +1,154 @@
+[
+ {
+  "task": "9-vague",
+  "setup": "off",
+  "run": 1,
+  "passed": false,
+  "costUsd": 0.30514139999999995,
+  "inputTokens": 14,
+  "outputTokens": 2615,
+  "cacheReadTokens": 207047,
+  "cacheWriteTokens": 26422,
+  "turns": 8,
+  "seconds": 28,
+  "stopped": null,
+  "models": {
+   "opus-5-5[1m]": 0.305
+  },
+  "jev": []
+ },
+ {
+  "task": "9-vague",
+  "setup": "jev",
+  "run": 1,
+  "passed": false,
+  "costUsd": 0.22180039999999998,
+  "inputTokens": 10,
+  "outputTokens": 1966,
+  "cacheReadTokens": 113122,
+  "cacheWriteTokens": 19977,
+  "turns": 5,
+  "seconds": 22,
+  "stopped": null,
+  "models": {
+   "opus-5-5[1m]": 0.222
+  },
+  "jev": [
+   "medium→medium (balanced)"
+  ]
+ },
+ {
+  "task": "9-vague",
+  "setup": "off",
+  "run": 2,
+  "passed": false,
+  "costUsd": 0.35130400000000006,
+  "inputTokens": 14,
+  "outputTokens": 3064,
+  "cacheReadTokens": 215120,
+  "cacheWriteTokens": 30868,
+  "turns": 8,
+  "seconds": 31,
+  "stopped": null,
+  "models": {
+   "opus-5-5[1m]": 0.351
+  },
+  "jev": []
+ },
+ {
+  "task": "9-vague",
+  "setup": "jev",
+  "run": 2,
+  "passed": false,
+  "costUsd": 0.30560199999999993,
+  "inputTokens": 20,
+  "outputTokens": 3460,
+  "cacheReadTokens": 277610,
+  "cacheWriteTokens": 22600,
+  "turns": 12,
+  "seconds": 36,
+  "stopped": null,
+  "models": {
+   "opus-5-5[1m]": 0.306
+  },
+  "jev": [
+   "medium→medium (balanced)"
+  ]
+ },
+ {
+  "task": "10-transfer",
+  "setup": "off",
+  "run": 1,
+  "passed": true,
+  "costUsd": 0.31249720000000003,
+  "inputTokens": 14,
+  "outputTokens": 2900,
+  "cacheReadTokens": 205726,
+  "cacheWriteTokens": 26662,
+  "turns": 10,
+  "seconds": 28,
+  "stopped": null,
+  "models": {
+   "opus-5-5[1m]": 0.312
+  },
+  "jev": []
+ },
+ {
+  "task": "10-transfer",
+  "setup": "jev",
+  "run": 1,
+  "passed": true,
+  "costUsd": 0.2879802,
+  "inputTokens": 18,
+  "outputTokens": 3153,
+  "cacheReadTokens": 247601,
+  "cacheWriteTokens": 21916,
+  "turns": 11,
+  "seconds": 37,
+  "stopped": null,
+  "models": {
+   "opus-5-5[1m]": 0.288
+  },
+  "jev": [
+   "medium→medium (deep)"
+  ]
+ },
+ {
+  "task": "10-transfer",
+  "setup": "off",
+  "run": 2,
+  "passed": true,
+  "costUsd": 0.2654496,
+  "inputTokens": 12,
+  "outputTokens": 2691,
+  "cacheReadTokens": 154908,
+  "cacheWriteTokens": 22575,
+  "turns": 8,
+  "seconds": 27,
+  "stopped": null,
+  "models": {
+   "opus-5-5[1m]": 0.265
+  },
+  "jev": []
+ },
+ {
+  "task": "10-transfer",
+  "setup": "jev",
+  "run": 2,
+  "passed": true,
+  "costUsd": 0.2752522,
+  "inputTokens": 16,
+  "outputTokens": 2832,
+  "cacheReadTokens": 213941,
+  "cacheWriteTokens": 21970,
+  "turns": 10,
+  "seconds": 30,
+  "stopped": null,
+  "models": {
+   "opus-5-5[1m]": 0.275
+  },
+  "jev": [
+   "medium→medium (deep)"
+  ]
+ }
+]

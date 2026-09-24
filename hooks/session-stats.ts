@@ -23,13 +23,15 @@ interface Stats {
   subagents: number
   /** Tokens used by those cheaper subagents (input, cache included, and output). */
   tokens: number
+  /** Turns your next message said were wrong. */
+  corrected: number
 }
 
 let stats: Stats = fresh()
 const cheaperAgents = new Map<string, string>()
 
 function fresh(): Stats {
-  return { turns: 0, lower: 0, higher: 0, base: null, cheaper: {}, subagents: 0, tokens: 0 }
+  return { turns: 0, lower: 0, higher: 0, base: null, cheaper: {}, subagents: 0, tokens: 0, corrected: 0 }
 }
 
 export function resetStats(): void {
@@ -46,6 +48,11 @@ export function recordTurn(from: string | null, started: string | null): number 
   if (a >= 0 && b >= 0 && b < a) stats.lower++
   if (a >= 0 && b >= 0 && b > a) stats.higher++
   return stats.turns
+}
+
+/** A turn your next message said was wrong. */
+export function recordCorrection(): void {
+  stats.corrected++
 }
 
 /** How a model ranks on cost: a custom model (`jev-…`) lowest, then Haiku, Sonnet, Opus; unknown: null. */
@@ -87,6 +94,7 @@ export function describeStats(): string {
   if (stats.turns === 0 && stats.subagents === 0) return 'this session: nothing decided yet'
   const parts = [`this session: ${stats.turns} turn${stats.turns === 1 ? '' : 's'}`]
   if (stats.base) parts.push(`${stats.lower} started below your ${stats.base} effort, ${stats.higher} above`)
+  if (stats.corrected > 0) parts.push(`${stats.corrected} you corrected`)
   const cheap = Object.values(stats.cheaper).reduce((sum, n) => sum + n, 0)
   if (stats.subagents > 0) {
     const which = Object.entries(stats.cheaper).map(([name, n]) => `${n} ${name}`).join(', ')

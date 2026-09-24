@@ -173,6 +173,21 @@ Advice is attached only when Jev is confident (0.6, or 0.8 for `graph`) and it a
 
 **Skills.** At most one per prompt. Jev reads every skill's description and the opening of its `SKILL.md`, next to a "none of these fits" option, and is asked to match the kind of work (debugging, planning, reviewing…), not a product the prompt happens to name. A skill is picked when Jev is sure of it, or when the prompt needs a skill and it still fits. The winner's `SKILL.md` is added to the prompt.
 
+**Better code, not just cheaper.** The same request also asks Jev what would make the work better. Jev can't judge code, since it never sees your repo, but it can judge the request. Each read acts only when Jev is sure:
+
+| Jev reads the request as… | Claude gets | Bar |
+|---|---|---|
+| vague: "add caching", "make it better" | ask one short question, or state the assumption in one line, before coding | 85% |
+| a bug: "it's off by one cent", "the test fails" | show the bug first with a failing test or a command, then fix it and show the same check passing | 80% |
+| a costly area: money, auth, migrations, security | run the tests that cover it and add one for the changed case; if a reviewer (Codex or OpenCode) is working, get its review | 80% |
+| your correction of the last turn: "it doesn't work", "not what I asked" | nothing: the last turn is marked in the ledger as corrected | 70% |
+
+The questions were tuned on sample prompts. For example, a first wording rated "add a dark mode toggle" as vague as "add caching"; the final one separates them (0.19 against 0.86).
+
+- **The corrections are the quality signal.** Until now jev-pilot only saw tool failures. `/jev-pilot:report` now shows, for each starting effort, how often you corrected the turn, and `/jev tune` leans up when cheap starts keep getting corrected. That's how you find out whether low effort is really enough for your work.
+- **A turn going in circles.** When the same file is edited 4 times in a turn, or the same command fails a third time, Claude gets a note after that tool call (you don't see it): step back, read the error in full, say what's causing it, and try something else. The effort goes up a level, once. Before, only tool calls failing back to back raised it, and the edit, test, edit, test loop never does that.
+- `/jev quality off` switches all of this off. It costs no extra wait: the questions ride in the same request.
+
 **One request per prompt.** The effort, model, strategy and skill questions all go to Jev together, in one request of about 0.5 s. Before 0.6 there were three requests one after another: effort and strategy, the skill ranking, then a re-check of the top skills, about 1.5 s in all. On 16 test prompts the single request picked the same skill 14 times, and the other two picks were better. A plain "continue" asks nothing: the work goes on as the last turn decided. (Catalogs over the API's 255-choice limit are ranked in parallel batches, so it's still one wait.) `/jev-pilot:setup` can hide your own skills from Claude's skill list entirely (it asks first; `restore` undoes it).
 
 ## 🛩️ Meet the pilot
@@ -203,7 +218,7 @@ Everything is on by default except switching the main conversation's model. Type
 
 ```
 /jev                    what is on
-/jev skills off         one switch: effort · raise · subagents · skills · strategy · model · pet
+/jev skills off         one switch: effort · raise · subagents · skills · strategy · quality · model · pet
 /jev all off            every switch (all on turns them back on)
 /jev reset              back to your settings' defaults
 ```

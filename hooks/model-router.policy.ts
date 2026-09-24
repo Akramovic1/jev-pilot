@@ -57,6 +57,11 @@ export interface Decision {
   strategy?: Strategy | null
   /** Confidence in the strategy, or null when the backend reported none. */
   strategyConfidence?: number | null
+  /** The quality reads (see QUALITY_QUESTIONS): P(true) each, when asked and answered. */
+  corrects?: number | null
+  underspecified?: number | null
+  sensitive?: number | null
+  bugfix?: number | null
 }
 
 /**
@@ -94,6 +99,82 @@ const STRATEGY_CRITERIA: Record<Strategy, string> = {
 const RISK_CRITERIA = {
   true: 'Doing the task runs something against a real system with lasting effect: deploying or releasing, changing production data or configuration, moving money, deleting or overwriting data with no backup, or rewriting shared history (force-push).',
   false: 'Reading, explaining, planning, or writing and testing code locally, even code that deals with production, payments or data, without running it against the real system.',
+}
+
+/**
+ * What Jev reads about a request to make the work better, not cheaper, asked
+ * in the same request as the effort (no extra wait). Each wording measured
+ * on sample prompts: `corrects` 0.95+ on "it doesn't work / not what I
+ * asked" and 0.34 at most otherwise; `bugfix` 0.91+ on bug reports; `sensitive`
+ * 0.84+ on money, migrations and permissions; `underspecified` 0.86+ on vague
+ * asks ("add caching", "make it better") and 0.78 at most on concrete ones
+ * (a first wording scored "add a dark mode toggle" 0.86, so what a capable
+ * engineer decides alone is ruled out in the question).
+ */
+export const QUALITY_QUESTIONS: Record<'corrects' | 'underspecified' | 'sensitive' | 'bugfix', { instructions: string; criteria: { true: string; false: string } }> = {
+  corrects: {
+    instructions: "The user's latest message tells the assistant that its previous answer or work was wrong, broken, incomplete, or not what was asked, and asks for it to be fixed or redone.",
+    criteria: {
+      true: "The message reports a problem with what the assistant just did or said: it doesn't work, it's wrong, it missed something, it's not what was asked, try again.",
+      false: 'The message approves, continues, asks something new, or gives a new task; or there was no previous answer.',
+    },
+  },
+  underspecified: {
+    instructions:
+      "Before starting, the assistant would have to guess what the user wants, because the request can reasonably mean quite different things that lead to different code, and a wrong guess would waste the work. Details a capable engineer decides without asking (names, layout, sensible defaults, where to put a file) don't count.",
+    criteria: {
+      true: 'Vague or open-ended: what to build or how it should behave is not said, e.g. "make it better", "add caching", "add rate limiting" with no limits, keys or storage given.',
+      false:
+        'A concrete task an engineer could just do, filling small gaps with sensible defaults, e.g. "add a dark mode toggle to settings", "add a test for X", "rename A to B", "change the color to blue"; or a question, or an approval.',
+    },
+  },
+  sensitive: {
+    instructions:
+      'The requested change is to code where a bug is costly: authentication or permissions, payments or money, stored data or migrations, security or secrets, concurrency, or an interface other code depends on.',
+    criteria: {
+      true: 'Getting this change subtly wrong could lose data or money, let in the wrong user, leak something, or break other code.',
+      false: 'A mistake here would be visible and cheap to fix: styling, wording, a script, a test, docs, a small internal helper; or it is not a code change.',
+    },
+  },
+  bugfix: {
+    instructions: 'The latest request asks to fix a bug: something behaves wrongly (an error, a crash, a failing test, a wrong result) and should be made to behave right.',
+    criteria: {
+      true: 'Something works wrong and the user wants it to work right.',
+      false: 'A new feature, a change of behavior on purpose, a refactor, a question, docs, or an approval.',
+    },
+  },
+}
+
+/** How sure Jev must be before each read changes anything. */
+export const QUALITY_BARS = { corrects: 0.7, underspecified: 0.85, sensitive: 0.8, bugfix: 0.8 }
+
+/**
+ * The advice a request's quality reads call for, as one block for the model
+ * (advice to weigh, like the strategy), or null. `reviewer` is the external
+ * reviewer to name for sensitive changes, when one is working.
+ */
+export function qualityAdvice(decision: Decision | null, reviewer: string | null): string | null {
+  if (!decision) return null
+  const sure = (value: number | null | undefined, bar: number) => typeof value === 'number' && value >= bar
+  const pct = (value: number | null | undefined) => `${Math.round((value ?? 0) * 100)}% sure`
+  const lines: string[] = []
+  if (sure(decision.underspecified, QUALITY_BARS.underspecified)) {
+    lines.push(
+      `- It leaves open what to build or how it should behave (${pct(decision.underspecified)}). Before writing code, ask the user one short question, or state in one line the assumption you're making and go on.`,
+    )
+  }
+  if (sure(decision.bugfix, QUALITY_BARS.bugfix)) {
+    lines.push(
+      `- It's a bug to fix (${pct(decision.bugfix)}). Show the bug first: a failing test, or a command that reproduces it. Then fix it, and show the same check passing.`,
+    )
+  }
+  if (sure(decision.sensitive, QUALITY_BARS.sensitive)) {
+    lines.push(
+      `- It touches code where a bug is costly (${pct(decision.sensitive)}). Before calling it done, run the tests that cover it and add one for the case you changed${reviewer ? `; then have ${reviewer} review the change` : ''}.`,
+    )
+  }
+  if (lines.length === 0) return null
+  return ['<jev_quality>', "Jev's read of this request (advice to weigh, not an order):", ...lines, '</jev_quality>'].join('\n')
 }
 
 /** The reasoning levels a turn can ask for, cheapest first. */
@@ -223,7 +304,7 @@ export const EFFORT_CHOICES: Record<Effort, string> = Object.fromEntries(
   EFFORT_ORDER.map((level, index) => [level, EFFORT_RUBRIC[index] as string]),
 ) as Record<Effort, string>
 
-export function questions(provider: Provider, withStrategy = false, subagent = false, slots: readonly SlotChoice[] = [], junior = false): Record<string, unknown> {
+export function questions(provider: Provider, withStrategy = false, subagent = false, slots: readonly SlotChoice[] = [], junior = false, withQuality = false): Record<string, unknown> {
   // Custom models, when offered, take the cheap end: they replace Haiku as
   // the choice for work with nothing to judge (offered beside it, Jev split
   // its answer between the two), each saying when to choose it.
@@ -256,6 +337,11 @@ export function questions(provider: Provider, withStrategy = false, subagent = f
       ...(provider === 'gateway' ? {} : { criteria: RISK_CRITERIA }),
     },
   }
+  if (withQuality) {
+    for (const [name, question] of Object.entries(QUALITY_QUESTIONS)) {
+      asked[name] = provider === 'gateway' ? { type: 'boolean', instructions: question.instructions } : { type: 'noul', instructions: question.instructions, criteria: question.criteria }
+    }
+  }
   if (withStrategy) {
     asked.strategy = {
       type: 'choice',
@@ -279,8 +365,9 @@ export function requestBody(
   junior = false,
   /** Another module's questions, asked in the same request (the skill pick). */
   extra: Record<string, unknown> = {},
+  withQuality = false,
 ): string {
-  const asked = { ...questions(provider, withStrategy, subagent, slots, junior), ...extra }
+  const asked = { ...questions(provider, withStrategy, subagent, slots, junior, withQuality), ...extra }
   const body = provider !== 'gateway' ? { model, state, questions: asked } : { state, questions: asked }
   return JSON.stringify(body)
 }
@@ -353,13 +440,7 @@ export function readDecision(responseText: string, slots: readonly string[] = []
   if (!tierAnswer || (!slot && !isTier(tierAnswer.choice))) return null
 
   const effortAnswer = answers.effort
-  const riskyAnswer = answers.risky
-  const risky =
-    typeof riskyAnswer?.noul === 'number'
-      ? riskyAnswer.noul
-      : typeof riskyAnswer?.probability === 'number'
-        ? riskyAnswer.probability
-        : null
+  const risky = nounOf(answers.risky)
 
   // The strategy is optional: a request that did not ask it, or an answer
   // naming something else, leaves it null and the rest of the decision stands.
@@ -391,7 +472,21 @@ export function readDecision(responseText: string, slots: readonly string[] = []
     risky,
     strategy,
     strategyConfidence: strategy && strategyAnswer ? confidenceOf(strategyAnswer) : null,
+    // Only the quality reads that were asked and answered.
+    ...Object.fromEntries(
+      (['corrects', 'underspecified', 'sensitive', 'bugfix'] as const).flatMap((name) => {
+        const value = nounOf(answers[name])
+        return value === null ? [] : [[name, value]]
+      }),
+    ),
   }
+}
+
+/** A noul's P(true) (or a Gateway boolean's probability), or null when not asked or not answered. */
+function nounOf(answer: Record<string, unknown> | undefined): number | null {
+  if (typeof answer?.noul === 'number') return answer.noul
+  if (typeof answer?.probability === 'number') return answer.probability
+  return null
 }
 
 function isStrategy(value: unknown): value is Strategy {
@@ -832,6 +927,8 @@ export interface Capabilities {
   skills: boolean
   strategy: boolean
   model: boolean
+  /** The quality reads: advice blocks, correction marks, step-back notes. */
+  quality?: boolean
 }
 
 /**
@@ -860,6 +957,11 @@ export function capabilityNote(on: Capabilities, crew: string[] = []): string | 
   }
   if (on.skills) does.push('- attaches the one skill a request needs, if any')
   if (on.strategy) does.push('- may attach an <execution_strategy> block: advice to weigh, not an order')
+  if (on.quality) {
+    does.push(
+      "- may attach a <jev_quality> block, its read of the request (vague, a bug, a costly area) with what to do about it: advice to weigh, not an order; and may add a note after a tool result when a turn goes in circles",
+    )
+  }
   if (does.length === 0 && crew.length === 0) return null
   const leave: string[] = []
   if (on.subagents) {
@@ -1036,6 +1138,8 @@ export function describeDecision(decision: Decision | null, ms: number | null, m
   }
   if (decision.risky !== null) parts.push(`risky ${reported(decision.risky)}`)
   if (decision.strategy) parts.push(`strategy ${decision.strategy} (${reported(decision.strategyConfidence ?? null)})`)
+  const reads = (['underspecified', 'bugfix', 'sensitive', 'corrects'] as const).filter((name) => typeof decision[name] === 'number')
+  if (reads.length > 0) parts.push(reads.map((name) => `${name} ${reported(decision[name] as number)}`).join(' '))
   return parts.join(' · ') + took
 }
 
@@ -1052,4 +1156,48 @@ export function describeStatus(
   if (!change) return `jev · ${asked} · unchanged`
   const to = [change.model, change.effort].filter(Boolean).join('/')
   return `jev · ${asked} → ${to}`
+}
+
+// --- a turn going in circles --------------------------------------------------------
+
+/** The tools that change a file, counted per file within a turn. */
+const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit'])
+/** A file edited this many times in one turn, or a command run this many times still failing. */
+export const SPIN_EDITS = 4
+export const SPIN_RUNS = 3
+
+/**
+ * Counts a tool call into the turn's tallies, and says why the turn looks to
+ * be going in circles when this call makes it so: the same file edited
+ * SPIN_EDITS times, or the same command failing SPIN_RUNS times with no pass
+ * between (a pass starts its count again). Null otherwise. Counted locally,
+ * from the calls alone.
+ */
+export function spinOf(
+  input: { tool?: string; file_path?: unknown; command?: unknown },
+  failed: boolean,
+  edits: Map<string, number>,
+  runs: Map<string, number>,
+): string | null {
+  if (input.tool && EDIT_TOOLS.has(input.tool) && typeof input.file_path === 'string') {
+    const count = (edits.get(input.file_path) ?? 0) + 1
+    edits.set(input.file_path, count)
+    if (count === SPIN_EDITS) return `the same file (${input.file_path.split('/').pop()}) was edited ${count} times in this turn`
+  }
+  if (input.tool === 'Bash' && typeof input.command === 'string') {
+    const command = input.command.trim().replace(/\s+/g, ' ')
+    if (!failed) {
+      runs.delete(command)
+      return null
+    }
+    const count = (runs.get(command) ?? 0) + 1
+    runs.set(command, count)
+    if (count === SPIN_RUNS) return `the same command (${command.slice(0, 60)}) failed ${count} times in this turn`
+  }
+  return null
+}
+
+/** What the model reads after the tool result that shows the circle. */
+export function stepBackNote(circle: string): string {
+  return `[jev-pilot] This turn may be going in circles: ${circle}. Step back before the next change: read the latest error or output in full, say in one line what you think is causing it, and try a different approach if the last ones didn't work.`
 }

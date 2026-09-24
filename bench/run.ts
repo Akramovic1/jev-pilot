@@ -165,6 +165,8 @@ function once(task: string, setup: string, run: number): Result {
   } catch {
     parsed = null
   }
+  // The final answer, for checks that read what Claude said (did it ask, or state its assumptions?).
+  writeFileSync(join(project, '.answer.txt'), typeof parsed?.result === 'string' ? parsed.result : '')
   const verify = sh(['bash', join(HERE, 'tasks', task, 'verify.sh')], project, {}, 300_000)
   const usage = parsed?.usage ?? {}
   const models: Record<string, number> = {}

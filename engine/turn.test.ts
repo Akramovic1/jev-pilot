@@ -81,14 +81,45 @@ test('two failed tool calls in a row raise the turn one rung, once', async ($, o
   await step($, 1, 'medium')
   await bash($, 'false')
   await step($, 2, 'medium')
+  // The pet's bubble says the raise.
+  expect(await bubble($)).toContain('2 fails → high')
+  // The same command failing a third time: going in circles, said once.
   await bash($, 'false')
+  expect(await bubble($)).toContain('going in circles')
   await step($, 3, 'medium')
 
   expect(efforts).toEqual(['medium', 'medium', 'high', 'high'])
   // By default jev-pilot talks through the pet, never in the conversation.
   expect(log.filter((line) => line.startsWith('jev') || line.startsWith('[jev'))).toEqual([])
-  // The pet's bubble says the raise.
-  expect(await bubble($)).toContain('2 fails → high')
+})
+
+test('a turn going in circles gets one step-back note, to the model only, and one raise', async ($, on) => {
+  const transcript: SessionMessage[] = [{ role: 'user', text: 'fix the build', toolUses: [] }]
+  const { efforts } = world(on, 'balanced', () => transcript)
+  const notes: string[] = []
+  // Beneath the plugins: edits succeed, the test command fails.
+  on('tool.call', async (_$, e) => {
+    const command = String((e as { command?: unknown }).command ?? '')
+    return command === 'bun test' ? { result: 'exit 1', text: 'exit 1', isError: true as const } : { result: 'ok', text: 'ok' }
+  })
+  on('prompt.submit', async (_$, e) => ({ text: e.text, context: e.context }))
+  await $.prompt.submit({ text: 'fix the build', wait: false } as never)
+  let index = 0
+  await step($, index++, 'medium')
+  // Edit, test, edit, test...: never two failures in a row, so no plain raise.
+  for (let round = 0; round < 3; round++) {
+    await $.tool.call({ tool: 'Edit', file_path: '/repo/src/queue.ts', old_string: 'a', new_string: 'b' } as never)
+    await step($, index++, 'medium')
+    const result = (await $.tool.call({ tool: 'Bash', command: 'bun test' } as never)) as { context?: readonly string[] }
+    notes.push(...(result.context ?? []))
+    await step($, index++, 'medium')
+  }
+  expect(notes.length).toBe(1)
+  expect(notes[0]).toContain('going in circles')
+  expect(notes[0]).toContain('bun test')
+  // The circle raised the effort one rung, once.
+  expect(efforts.slice(-1)[0]).toBe('high')
+  expect(efforts.filter((effort) => effort === 'high').length).toBeGreaterThan(0)
 })
 
 test('a success resets the run, and a refused permission is not a failure', async ($, on) => {
