@@ -1,0 +1,1 @@
+Rename formatPrice to formatMoney everywhere in this project: the function, its imports and every use. Keep the tests passing.

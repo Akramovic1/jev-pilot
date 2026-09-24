@@ -1,0 +1,154 @@
+[
+ {
+  "task": "1-rename",
+  "setup": "off",
+  "run": 1,
+  "passed": true,
+  "costUsd": 0.3086088,
+  "inputTokens": 16,
+  "outputTokens": 3225,
+  "cacheReadTokens": 229224,
+  "cacheWriteTokens": 24775,
+  "turns": 16,
+  "seconds": 34,
+  "stopped": null,
+  "models": {
+   "opus-5-5[1m]": 0.309
+  },
+  "jev": []
+ },
+ {
+  "task": "1-rename",
+  "setup": "jev",
+  "run": 1,
+  "passed": true,
+  "costUsd": 0.3153746,
+  "inputTokens": 20,
+  "outputTokens": 3200,
+  "cacheReadTokens": 290153,
+  "cacheWriteTokens": 24158,
+  "turns": 19,
+  "seconds": 35,
+  "stopped": null,
+  "models": {
+   "opus-5-5[1m]": 0.315
+  },
+  "jev": [
+   "medium→high (fast)"
+  ]
+ },
+ {
+  "task": "2-slugify",
+  "setup": "off",
+  "run": 1,
+  "passed": true,
+  "costUsd": 0.2307104,
+  "inputTokens": 10,
+  "outputTokens": 1756,
+  "cacheReadTokens": 125512,
+  "cacheWriteTokens": 21306,
+  "turns": 6,
+  "seconds": 19,
+  "stopped": null,
+  "models": {
+   "opus-5-5[1m]": 0.231
+  },
+  "jev": []
+ },
+ {
+  "task": "2-slugify",
+  "setup": "jev",
+  "run": 1,
+  "passed": true,
+  "costUsd": 0.20382460000000002,
+  "inputTokens": 8,
+  "outputTokens": 1611,
+  "cacheReadTokens": 87103,
+  "cacheWriteTokens": 19269,
+  "turns": 5,
+  "seconds": 19,
+  "stopped": null,
+  "models": {
+   "opus-5-5[1m]": 0.204
+  },
+  "jev": [
+   "medium→medium (balanced)"
+  ]
+ },
+ {
+  "task": "3-flaky",
+  "setup": "off",
+  "run": 1,
+  "passed": true,
+  "costUsd": 0.29677879999999995,
+  "inputTokens": 12,
+  "outputTokens": 2684,
+  "cacheReadTokens": 167894,
+  "cacheWriteTokens": 26184,
+  "turns": 7,
+  "seconds": 30,
+  "stopped": null,
+  "models": {
+   "opus-5-5[1m]": 0.297
+  },
+  "jev": []
+ },
+ {
+  "task": "3-flaky",
+  "setup": "jev",
+  "run": 1,
+  "passed": true,
+  "costUsd": 0.34733120000000006,
+  "inputTokens": 20,
+  "outputTokens": 5177,
+  "cacheReadTokens": 287476,
+  "cacheWriteTokens": 23277,
+  "turns": 11,
+  "seconds": 55,
+  "stopped": null,
+  "models": {
+   "opus-5-5[1m]": 0.347
+  },
+  "jev": [
+   "medium→xhigh (deep)"
+  ]
+ },
+ {
+  "task": "4-search",
+  "setup": "off",
+  "run": 1,
+  "passed": true,
+  "costUsd": 0.24761080000000002,
+  "inputTokens": 10,
+  "outputTokens": 1123,
+  "cacheReadTokens": 130034,
+  "cacheWriteTokens": 24888,
+  "turns": 6,
+  "seconds": 16,
+  "stopped": null,
+  "models": {
+   "opus-5-5[1m]": 0.248
+  },
+  "jev": []
+ },
+ {
+  "task": "4-search",
+  "setup": "jev",
+  "run": 1,
+  "passed": true,
+  "costUsd": 0.21345540000000002,
+  "inputTokens": 10,
+  "outputTokens": 1405,
+  "cacheReadTokens": 118937,
+  "cacheWriteTokens": 20191,
+  "turns": 6,
+  "seconds": 18,
+  "stopped": null,
+  "models": {
+   "opus-5-5[1m]": 0.213
+  },
+  "jev": [
+   "medium→high (fast)"
+  ]
+ }
+]

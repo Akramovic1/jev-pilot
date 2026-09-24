@@ -1,0 +1,1 @@
+Implement slugify in src/slug.ts so that tests/slug.test.ts passes. Don't change the tests.

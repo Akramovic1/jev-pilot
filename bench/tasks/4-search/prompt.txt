@@ -1,0 +1,1 @@
+List every function in src/ that reads process.env directly instead of going through src/config.ts. Write them to ENV_READS.md, one per line as file:function (for example src/x.ts:doThing). Don't change any code.
