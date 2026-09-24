@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.9 — 2026-09-24
+
+- **xhigh only when Jev is sure.** Close calls still lean up, but only as far as `high`. `xhigh` now needs Jev at least 60% sure the task is very hard (`xhigh` and `max` together), so a near split between hard and very hard stays at `high`.
+- **Subagents are rated on carrying out their brief.** A planner's detailed brief (files, steps, tests, stakes) read as hard in itself, so builders and fixers mostly got `xhigh`. Jev is now asked how much reasoning the subagent needs to carry the brief out. On 14 real builder and fixer briefs: 10 × `xhigh` before, 12 × `high`, 1 × `xhigh` (a design brief) and 1 × `medium` now.
+
 ## 0.4.8 — 2026-09-24
 
 - **Goggles down while subagents work.** With subagents still running in the background after a turn, the pilot cruises, goggles down, at a calm redraw rate, until they're all done. The engine's own list of agents is checked every 1.5 s, so a stopped or failed agent never leaves it flying.

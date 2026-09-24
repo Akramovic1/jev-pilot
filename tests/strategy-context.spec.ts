@@ -12,6 +12,7 @@ import {
   requestBody,
   route,
   STRATEGY_ORDER,
+  SUBAGENT_EFFORT_INSTRUCTIONS,
 } from '../hooks/model-router.policy.ts'
 import type { Decision, PolicyConfig, Strategy, StrategyConfig } from '../hooks/model-router.policy.ts'
 import { requestBody as skillRequestBody, wideQuestions } from '../hooks/skill-suggestion.policy.ts'
@@ -299,4 +300,41 @@ test('the risk question says what true and false look like, where the schema tak
   const gateway = questions('gateway').risky as { type: string; criteria?: unknown }
   expect(gateway.type).toBe('boolean')
   expect(gateway.criteria).toBeUndefined()
+})
+
+// ---- above high, the bar is how sure the model is --------------------------------
+// Distributions below are Jev's real answers for subagent briefs of 2026-09-24.
+
+const dist = (probabilities: Record<string, number>, effort: number) => ({ effort, effortProbabilities: probabilities })
+const bareScore = (effort: number) => ({ effort, effortProbabilities: null })
+
+test('the lean on close calls stops at high: a near split with xhigh stays high', () => {
+  // "Accept slow successful heartbeats": high 52, xhigh 45, max 1.
+  expect(effortScoreOf(dist({ '2': 0.52, '3': 0.45, '4': 0.01 }, 2.47), 0.15)).toBe(2)
+  // "Build plan 3 tasks 1-4": xhigh 51 on top, but xhigh and max hold 57 in all.
+  expect(effortScoreOf(dist({ '2': 0.42, '3': 0.51, '4': 0.06 }, 2.63), 0.15)).toBe(2)
+})
+
+test('xhigh when the model is at least 60% sure the task is very hard, even with high on top', () => {
+  // "Fix plan-3 Codex findings": xhigh 84, max 14.
+  expect(effortScoreOf(dist({ '2': 0.02, '3': 0.84, '4': 0.14 }, 3.12), 0.15)).toBe(3)
+  // high came top, but xhigh and max together hold 60.
+  expect(effortScoreOf(dist({ '2': 0.4, '3': 0.35, '4': 0.25 }, 2.85), 0.15)).toBe(3)
+  // The bar is adjustable.
+  expect(effortScoreOf(dist({ '2': 0.42, '3': 0.51, '4': 0.06 }, 2.63), 0.15, 0.5)).toBe(3)
+})
+
+test('a bare score leans up only as far as high', () => {
+  expect(effortScoreOf(bareScore(1.4), 0.15)).toBe(2)
+  expect(effortScoreOf(bareScore(2.4), 0.15)).toBe(2)
+  expect(effortScoreOf(bareScore(2.5), 0.15)).toBe(3)
+})
+
+test('a subagent is asked about carrying out its brief, on the same rubric', () => {
+  const general = questions('openrouter') as Record<string, { instructions: string; criteria: string[] }>
+  const subagent = questions('openrouter', false, true) as Record<string, { instructions: string; criteria: string[] }>
+  expect(subagent.effort?.instructions).toBe(SUBAGENT_EFFORT_INSTRUCTIONS)
+  expect(general.effort?.instructions).not.toBe(SUBAGENT_EFFORT_INSTRUCTIONS)
+  expect(subagent.effort?.criteria).toEqual(general.effort?.criteria)
+  expect(JSON.parse(requestBody('openrouter', { prompt: 'x' }, 'm', false, true)).questions.effort.instructions).toBe(SUBAGENT_EFFORT_INSTRUCTIONS)
 })

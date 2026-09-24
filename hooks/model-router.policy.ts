@@ -171,7 +171,17 @@ export function endpoint(provider: Provider, baseUrl: string): string {
  * is asked only for the main conversation: a subagent is already one part of
  * a split, and its own is not this router's to decide.
  */
-export function questions(provider: Provider, withStrategy = false): Record<string, unknown> {
+/**
+ * The effort question for a subagent's brief. Asked as for a conversation,
+ * a planner's detailed brief (files, steps, tests, stakes) reads as hard in
+ * itself; what the subagent needs is the reasoning to carry it out. Measured
+ * on 14 real builder and fixer briefs: 10 read as xhigh with the general
+ * question, 1 with this one (the brief that asked for a design).
+ */
+export const SUBAGENT_EFFORT_INSTRUCTIONS =
+  'How much step-by-step reasoning does a subagent need to carry out this brief? A brief that already names the files, the steps and the tests has done the design: carrying it out is execution. Rate higher only when the brief itself asks for design, an unknown cause, or reasoning that is not already written out.'
+
+export function questions(provider: Provider, withStrategy = false, subagent = false): Record<string, unknown> {
   const asked: Record<string, unknown> = {
     tier: {
       type: 'choice',
@@ -180,7 +190,7 @@ export function questions(provider: Provider, withStrategy = false): Record<stri
     },
     effort: {
       type: 'score',
-      instructions: 'How much step-by-step reasoning does this task need?',
+      instructions: subagent ? SUBAGENT_EFFORT_INSTRUCTIONS : 'How much step-by-step reasoning does this task need?',
       criteria: EFFORT_RUBRIC,
     },
     risky: {
@@ -216,8 +226,9 @@ export function requestBody(
   state: Record<string, unknown>,
   model: string,
   withStrategy = false,
+  subagent = false,
 ): string {
-  const asked = questions(provider, withStrategy)
+  const asked = questions(provider, withStrategy, subagent)
   const body = provider !== 'gateway' ? { model, state, questions: asked } : { state, questions: asked }
   return JSON.stringify(body)
 }
@@ -325,19 +336,33 @@ function confidenceOf(answer: Record<string, unknown>): number | null {
   return values.length > 0 ? Math.max(...values) : null
 }
 
+/** The rubric level for "hard": the lean on close calls goes no higher. */
+const HARD = 2
+
 /**
- * The rubric level to act on, leaning up on a close call; null without an
- * effort answer.
+ * How sure the decision model must be that a task is very hard (xhigh or
+ * max, together) to act on it: above `high`, each rung costs a lot, so a
+ * near split between hard and very hard stays at hard.
+ */
+export const VERY_HARD_CONFIDENCE = 0.6
+
+/**
+ * The rubric level to act on; null without an effort answer.
  *
- * Under-thinking a hard task costs more than over-thinking an easy one, so
- * when two levels are nearly tied the higher wins. With a distribution, the
- * runner-up is taken when it is higher and within `margin` of the top; with
- * a bare score, a fraction at or above `0.5 - margin` rounds up. A margin of
- * 0 is plain rounding and the plain top of the distribution.
+ * Under-thinking a hard task costs more than over-thinking an easy one, so up
+ * to `high` a close call leans up: with a distribution, the runner-up is
+ * taken when it is higher (at most `high`) and within `margin` of the top;
+ * with a bare score, a fraction at or above `0.5 - margin` rounds up (at most
+ * to `high`). A margin of 0 is plain rounding and the plain top.
+ *
+ * Above `high` the bar is how sure the model is: `xhigh` or `max` only when
+ * those two together hold at least `veryHard` of the answer, and `xhigh` when
+ * they do even though `high` alone came top.
  */
 export function effortScoreOf(
   decision: Pick<Decision, 'effort' | 'effortProbabilities'>,
   margin: number,
+  veryHard = VERY_HARD_CONFIDENCE,
 ): number | null {
   const top = EFFORT_ORDER.length - 1
   const ranked = Object.entries(decision.effortProbabilities ?? {})
@@ -353,13 +378,18 @@ export function effortScoreOf(
     .sort((a, b) => b.probability - a.probability || b.level - a.level)
   const [best, second] = ranked
   if (best) {
-    if (second && second.level > best.level && best.probability - second.probability <= margin) return second.level
-    return best.level
+    let level = best.level
+    if (second && second.level > level && second.level <= HARD && best.probability - second.probability <= margin) level = second.level
+    const veryHardShare = ranked.filter((entry) => entry.level > HARD).reduce((sum, entry) => sum + entry.probability, 0)
+    if (level > HARD && veryHardShare < veryHard) return HARD
+    if (level <= HARD && veryHardShare >= veryHard) return HARD + 1
+    return level
   }
   if (decision.effort === null || !Number.isFinite(decision.effort)) return null
   const score = Math.min(top, Math.max(0, decision.effort))
   const whole = Math.floor(score)
-  return Math.min(top, score - whole >= 0.5 - margin ? whole + 1 : whole)
+  const lean = whole + 1 <= HARD ? margin : 0
+  return Math.min(top, score - whole >= 0.5 - lean ? whole + 1 : whole)
 }
 
 /** The rubric score (0..4) as a reasoning level. */

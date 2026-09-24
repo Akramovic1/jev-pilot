@@ -127,6 +127,7 @@ async function classify(
   state: Record<string, unknown>,
   withStrategy: boolean,
   what: string,
+  subagent = false,
 ): Promise<{ decision: Decision | null; miss: Miss | null }> {
   if (!backend) return { decision: null, miss: null }
   try {
@@ -134,7 +135,7 @@ async function classify(
       io.fetch(backend.url, {
         method: 'POST',
         headers: requestHeaders(backend.provider, backend.apiKey, backend.modelId),
-        body: requestBody(backend.provider, state, backend.modelId, withStrategy),
+        body: requestBody(backend.provider, state, backend.modelId, withStrategy, subagent),
       }),
       io.sleep(backend.timeoutMs),
     ])
@@ -775,6 +776,7 @@ export const register: Register = (on, options) => {
           { prompt: e.prompt, description: e.description, agentType: e.subagentType },
           false,
           'the subagent',
+          true,
         )
       ).decision
     } else {
