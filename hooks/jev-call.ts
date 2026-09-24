@@ -38,24 +38,45 @@ export interface RouterPart {
   settle: (answer: Answer) => Promise<string | null>
 }
 
-let offered: RouterPart | null = null
+/**
+ * The parts waiting, by prompt text, oldest first. The engine gives a
+ * prompt no id of its own, so its text is the key; two prompts with the same
+ * text (a quick double submit) can only swap parts built for identical text,
+ * and a take for one prompt never touches another's part.
+ */
+const offered = new Map<string, RouterPart[]>()
+const MAX_WAITING = 16
 
 /** The router's part for this prompt, waiting for the skill module. */
 export function offerPart(part: RouterPart): void {
-  offered = part
+  const queue = offered.get(part.prompt) ?? []
+  queue.push(part)
+  offered.set(part.prompt, queue)
+  // Bounded: parts nobody takes (a module that never ran) don't pile up.
+  while ([...offered.values()].reduce((n, q) => n + q.length, 0) > MAX_WAITING) {
+    const [oldest] = offered.keys()
+    if (oldest === undefined) break
+    const q = offered.get(oldest) as RouterPart[]
+    q.shift()
+    if (q.length === 0) offered.delete(oldest)
+  }
 }
 
-/** Takes the part for this prompt, once: null when there is none for it. */
+/** Takes the oldest part waiting for this prompt, once: null when there is none for it. */
 export function takePart(prompt: string): RouterPart | null {
-  const part = offered
-  offered = null
-  return part && part.prompt === prompt ? part : null
+  const queue = offered.get(prompt)
+  const part = queue?.shift() ?? null
+  if (queue && queue.length === 0) offered.delete(prompt)
+  return part
 }
 
-/** Whether the part offered for this prompt is still waiting (nobody took it). */
+/** Whether this part is still waiting (nobody took it); it's withdrawn either way. */
 export function stillOffered(part: RouterPart): boolean {
-  if (offered !== part) return false
-  offered = null
+  const queue = offered.get(part.prompt)
+  const at = queue ? queue.indexOf(part) : -1
+  if (!queue || at < 0) return false
+  queue.splice(at, 1)
+  if (queue.length === 0) offered.delete(part.prompt)
   return true
 }
 

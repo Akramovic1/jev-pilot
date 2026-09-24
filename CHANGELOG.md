@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.8.1 — 2026-09-24
+
+A security and reliability release, from an independent review (Codex) of everything since 0.5.0.
+
+- **Security: only your claude-jev sessions can use the router.** Until now, any program on the machine, or any web page open in a browser, could send requests to jev-router on `127.0.0.1:8799`. That meant spending your OpenRouter credit through a custom model, or stopping the router and cutting every claude-jev session off from Claude. Every request now has to come under a secret path. The secret is made once in `~/.claude/jev-pilot/router-secret` (readable by you alone) and put in the address by `claude-jev`. Requests carrying a browser's `Origin` are refused. `/jev status` never shows the secret.
+- **A stream that breaks mid-answer no longer hangs the turn.** The router ends the response on a stream error so Claude Code can retry. When Claude Code goes away mid-answer, the model's request upstream is stopped too, instead of generating on.
+- **A graceful stop.** Stopping the router (an update, `claude-jev router stop`) lets answers in flight finish, up to 30 s.
+- **The one-request hand-off can't mix prompts.** Two prompts in flight each get their own questions (queued per prompt, oldest first), and a look for one never removes another's.
+- **Robust records.** The router keeps its last good table if it reads models.json half-written. A record written elsewhere counts at most 8 models. `/jev mode`, `junior`, `reviewer` and `models` refuse extra words.
+- **Custom models in workflows.** Workflow agents don't pass the Agent tool, so jev-pilot couldn't route them: in budget mode a workflow's agents ran on Opus. The note Claude gets now tells it to set each workflow agent's model (`opts.model`): Haiku or Sonnet by the work, and in budget mode your custom model for bulk work. Tested: a two-agent reading workflow ran entirely on DeepSeek.
+- jev-router is now version 6. `claude-jev` replaces an older one (including one without a secret) on its next start. The secret is made once, only when there's none (racing launches share the first one's), kept at mode 600, and never replaced automatically: a damaged one is reported, with how to fix it; the router only takes a models table that is well formed, and keeps its last good one otherwise; uninstalling also stops a router from before the secret.
+
 ## 0.8.0 — 2026-09-24
 
 **Your custom models, by name, in `/model`.**

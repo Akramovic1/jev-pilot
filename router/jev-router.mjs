@@ -20,6 +20,13 @@
  * requests), under the session's own login. Only a failure after the answer
  * has started streaming can't be taken back.
  *
+ * Only Claude Code sessions started by `claude-jev` can use it. Every request
+ * must come under a secret path (`http://127.0.0.1:8799/<secret>/…`, the
+ * secret kept in ~/.claude/jev-pilot/router-secret, readable by you alone),
+ * and a request a browser sends (it carries an `Origin`) is refused. Without
+ * that, any program on the machine, or any web page open in a browser, could
+ * spend your OpenRouter credit through it or stop it.
+ *
  * Started by `claude-jev`, under a small supervisor that restarts it if it
  * dies; runs with Node 18+ or Bun, no dependencies.
  *   JEV_ROUTER_PORT              port (8799)
@@ -32,7 +39,7 @@ import { createServer } from 'node:http'
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { Readable } from 'node:stream'
+import { Readable, pipeline } from 'node:stream'
 
 const PORT = Number(process.env.JEV_ROUTER_PORT ?? 8799)
 const UPSTREAM = (process.env.JEV_ROUTER_UPSTREAM ?? 'https://api.anthropic.com').replace(/\/$/, '')
@@ -41,8 +48,52 @@ const DIR = join(homedir(), '.claude', 'jev-pilot')
 const MODELS = join(DIR, 'models.json')
 const LOG = join(DIR, 'router.log')
 /** Bumped with every change here: `claude-jev` replaces a running router of another version. */
-export const ROUTER_VERSION = '4'
+export const ROUTER_VERSION = '6'
 const SLOT_TIMEOUT_MS = Number(process.env.JEV_ROUTER_SLOT_TIMEOUT_MS ?? 60000)
+const SECRET_FILE = join(DIR, 'router-secret')
+
+/** The secret every request's path starts with: the environment, else the file claude-jev writes. */
+function routerSecret() {
+  if (process.env.JEV_ROUTER_SECRET) return process.env.JEV_ROUTER_SECRET.replace(/\n+$/, '')
+  try {
+    // The same rule as claude-jev's: the file's text less trailing newlines.
+    return readFileSync(SECRET_FILE, 'utf8').replace(/\n+$/, '')
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * Whether a request may use the router, and the path it asks for once the
+ * secret is taken off: `{ path }`, or `{ status }` to refuse it with. A
+ * browser's request (it names its `Origin`) is refused whatever its path;
+ * a path without the secret gets a plain 404, saying nothing.
+ */
+export function admit(rawPath, headers, secret) {
+  if (!/^[0-9a-f]{32}$/.test(secret ?? '')) return { status: 503 }
+  if (headers.origin !== undefined || headers['sec-fetch-site'] !== undefined) return { status: 403 }
+  const prefix = `/${secret}`
+  if (rawPath !== prefix && !rawPath.startsWith(`${prefix}/`) && !rawPath.startsWith(`${prefix}?`)) return { status: 404 }
+  return { path: rawPath.slice(prefix.length) || '/' }
+}
+
+/**
+ * A slots table as jev-pilot writes it, or null: a plain object of at most
+ * 64 entries, each a valid name with a model id (or "" once removed).
+ */
+export function validTable(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const entries = Object.entries(value)
+  if (entries.length > 64) return null
+  const table = {}
+  for (const [name, slot] of entries) {
+    const model = slot && typeof slot === 'object' ? slot.model : undefined
+    if (!/^[a-z][a-z0-9-]{0,23}$/.test(name) || typeof model !== 'string') return null
+    if (model !== '' && !/^~?[\w.-]+\/[\w.:-]+$/.test(model)) return null
+    table[name] = { model }
+  }
+  return table
+}
 
 /** The slots, re-read whenever the file changes: { alpha: { model: 'deepseek/...' }, ... }. */
 let slots = {}
@@ -51,11 +102,15 @@ function currentSlots() {
   try {
     const mtime = statSync(MODELS).mtimeMs
     if (mtime !== slotsSeen) {
-      slots = JSON.parse(readFileSync(MODELS, 'utf8')).slots ?? {}
-      slotsSeen = mtime
+      const table = validTable(JSON.parse(readFileSync(MODELS, 'utf8')).slots)
+      // Only a table that is one replaces the last good table.
+      if (table) {
+        slots = table
+        slotsSeen = mtime
+      }
     }
   } catch {
-    slots = {}
+    // Missing (nothing set yet), or caught half-written: the last good table stays.
   }
   return slots
 }
@@ -178,22 +233,33 @@ function relay(upstream, res) {
   })
   res.writeHead(upstream.status, headers)
   if (!upstream.body) return res.end()
-  Readable.fromWeb(upstream.body).pipe(res)
+  // A stream that breaks mid-answer ends the response (Claude Code sees the
+  // error and retries) instead of leaving the turn waiting forever.
+  pipeline(Readable.fromWeb(upstream.body), res, (error) => {
+    if (error && error.name !== 'AbortError' && !String(error).includes('client closed')) log(`stream broke: ${String(error)}`)
+    if (error && !res.destroyed) res.destroy(error)
+  })
 }
 
 /** A request to Anthropic with the session's own headers (its login included). */
-function passThrough(req, url, body) {
+function passThrough(req, url, body, signal) {
   const headers = {}
   for (const [key, value] of Object.entries(req.headers)) {
     if (!['host', 'connection', 'content-length', 'accept-encoding'].includes(key)) headers[key] = value
   }
   headers['accept-encoding'] = 'identity'
-  return fetch(`${UPSTREAM}${url.pathname}${url.search}`, { method: req.method, headers, body })
+  return fetch(`${UPSTREAM}${url.pathname}${url.search}`, { method: req.method, headers, body, signal })
 }
 
-/** Runs `work` with an abort after `ms` without a response (the body may stream on after). */
-async function withTimeout(ms, work) {
+/**
+ * Runs `work` with an abort after `ms` without a response (the body may
+ * stream on after), and whenever `parent` aborts (Claude Code went away).
+ * Its own controller: a timeout here leaves `parent` free for the fallback.
+ */
+async function withTimeout(ms, parent, work) {
   const controller = new AbortController()
+  if (parent.signal.aborted) controller.abort(parent.signal.reason)
+  else parent.signal.addEventListener('abort', () => controller.abort(parent.signal.reason), { once: true })
   const timer = setTimeout(() => controller.abort(new Error(`no answer in ${Math.round(ms / 1000)}s`)), ms)
   try {
     return await work(controller.signal)
@@ -210,7 +276,17 @@ async function body(req) {
 
 const server = createServer(async (req, res) => {
   try {
-    const url = new URL(req.url, 'http://localhost')
+    const admitted = admit(String(req.url ?? '/'), req.headers, routerSecret())
+    if (admitted.status) {
+      res.writeHead(admitted.status, { 'content-type': 'text/plain' })
+      return res.end()
+    }
+    const url = new URL(admitted.path, 'http://localhost')
+    // Aborted when Claude Code goes away mid-answer, so the model stops too.
+    const upstreamAbort = new AbortController()
+    res.on('close', () => {
+      if (!res.writableFinished) upstreamAbort.abort(new Error('client closed'))
+    })
     if (url.pathname === '/jev-router/health') {
       res.writeHead(200, { 'content-type': 'application/json' })
       return res.end(JSON.stringify({ ok: true, version: ROUTER_VERSION, pid: process.pid, slots: Object.entries(currentSlots()).filter(([, slot]) => slot && slot.model).map(([name]) => name), upstream: UPSTREAM, fallbacks }))
@@ -221,7 +297,11 @@ const server = createServer(async (req, res) => {
       res.writeHead(200, { 'content-type': 'application/json' })
       res.end(JSON.stringify({ ok: true }))
       log('stopping on request')
-      return setTimeout(() => process.exit(0), 50)
+      // Answers in flight finish first (up to 30 s); no new ones are taken.
+      server.close(() => process.exit(0))
+      server.closeIdleConnections?.()
+      setTimeout(() => process.exit(0), 30_000).unref()
+      return
     }
     const raw = req.method === 'GET' || req.method === 'HEAD' ? undefined : await body(req)
     let parsed = null
@@ -255,7 +335,7 @@ const server = createServer(async (req, res) => {
             writeFileSync(process.env.JEV_ROUTER_DUMP, JSON.stringify(forOpenRouter(parsed, slot.model)))
           } catch {}
         }
-        const upstream = await withTimeout(SLOT_TIMEOUT_MS, (signal) =>
+        const upstream = await withTimeout(SLOT_TIMEOUT_MS, upstreamAbort, (signal) =>
           fetch(OPENROUTER, {
             method: 'POST',
             headers: {
@@ -283,11 +363,11 @@ const server = createServer(async (req, res) => {
       }
       fallbacks[slot.name] = { count: (fallbacks[slot.name]?.count ?? 0) + 1, why, at: new Date().toISOString(), to: model }
       log(`jev-${slot.name} failed (${why}); falling back to ${model}`)
-      return relay(await passThrough(req, url, JSON.stringify({ ...parsed, model })), res)
+      return relay(await passThrough(req, url, JSON.stringify({ ...parsed, model }), upstreamAbort.signal), res)
     }
 
     // Everything else: to Anthropic as it came, headers and all.
-    return relay(await passThrough(req, url, raw), res)
+    return relay(await passThrough(req, url, raw, upstreamAbort.signal), res)
   } catch (error) {
     log(`error: ${String(error)}`)
     if (!res.headersSent) res.writeHead(502, { 'content-type': 'application/json' })

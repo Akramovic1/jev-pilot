@@ -11,15 +11,29 @@ const part = (prompt: string): RouterPart => ({
 
 // ---- the hand-off: the router's questions ride with the skill ranking ----------------
 
-test("a part is taken once, and only for its own prompt", () => {
+test("a part is taken once, and only for its own prompt; another prompt's take leaves it alone", () => {
   const mine = part('fix the build')
   offerPart(mine)
   expect(takePart('something else')).toBeNull()
-  // A wrong-prompt take clears it too: a stale part never reaches a later prompt.
-  expect(takePart('fix the build')).toBeNull()
-  offerPart(mine)
   expect(takePart('fix the build')).toBe(mine)
   expect(takePart('fix the build')).toBeNull()
+})
+
+test('two prompts in flight each get their own part, oldest first, and the waiting list stays bounded', () => {
+  const a = part('same text')
+  const b = part('same text')
+  const c = part('other')
+  offerPart(a)
+  offerPart(c)
+  offerPart(b)
+  expect(takePart('other')).toBe(c)
+  expect(takePart('same text')).toBe(a)
+  expect(takePart('same text')).toBe(b)
+  for (let i = 0; i < 40; i++) offerPart(part(`p${i}`))
+  // Only the newest 16 wait; the oldest were dropped.
+  expect(takePart('p0')).toBeNull()
+  expect(takePart('p39')).not.toBeNull()
+  for (let i = 0; i < 40; i++) takePart(`p${i}`)
 })
 
 test('the router can tell whether its part was left untaken, and clears it', () => {

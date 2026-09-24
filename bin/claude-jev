@@ -49,28 +49,77 @@ export CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1
 # start, Claude Code runs as usual, without custom models.
 router_health() { curl -fsS --max-time 1 "$1/jev-router/health" 2>/dev/null; }
 
+# The secret every router request's path carries, so only claude-jev
+# sessions can use the router (not other programs, not web pages): made once,
+# readable by you alone.
+router_secret() {
+  local dir="$HOME/.claude/jev-pilot" file secret="" tmp
+  file="$dir/router-secret"
+  # Made only when there is none: written whole under a name of its own, then
+  # moved in without overwriting, so when launches race the first one's
+  # stands and every launch reads that one back. No lock needed.
+  if [[ ! -e "$file" ]]; then
+    mkdir -p "$dir"
+    tmp="$(umask 077 && mktemp "$dir/.router-secret.XXXXXX")" || return 1
+    od -An -N16 -tx1 /dev/urandom | tr -d ' \n' >"$tmp" || true
+    # Only a whole, well-formed secret is ever moved in.
+    if [[ "$(<"$tmp")" =~ ^[0-9a-f]{32}$ ]]; then mv -n "$tmp" "$file" 2>/dev/null || true; fi
+    rm -f "$tmp"
+  fi
+  # One rule everywhere (here, the router, the bench): the file's text, less
+  # trailing newlines, is exactly 32 hex characters. A file that isn't is
+  # never replaced here (replacing it is what would need a lock): you're told.
+  if [[ -f "$file" ]]; then secret="$(<"$file")" || secret=""; fi
+  if ! [[ "$secret" =~ ^[0-9a-f]{32}$ ]]; then
+    if [[ -e "$file" ]]; then
+      echo "claude-jev: ~/.claude/jev-pilot/router-secret is damaged (it must be 32 hex characters). Delete it and start claude-jev again." >&2
+    fi
+    return 1
+  fi
+  # Yours alone, whoever made it.
+  chmod 600 "$file" 2>/dev/null || true
+  printf '%s' "$secret"
+}
+
+# Stops the router at $1 (its secret address), waiting until it's gone.
+router_stop() {
+  curl -fsS --max-time 1 -X POST "$1/jev-router/stop" >/dev/null 2>&1 || return 1
+  for _ in 1 2 3 4 5 6 7 8 9 10; do router_health "$1" >/dev/null || return 0; sleep 0.2; done
+  return 0
+}
+
 start_router() {
   [[ "${JEV_ROUTER:-on}" == "off" ]] && return 0
-  local root="$1" port="${JEV_ROUTER_PORT:-8799}" runtime url health running wanted
+  local root="$1" port="${JEV_ROUTER_PORT:-8799}" runtime base url secret health running wanted
   local script="$root/router/jev-router.mjs"
   [[ -f "$script" ]] && command -v curl >/dev/null 2>&1 || return 0
   runtime="$(command -v node || command -v bun)" || return 0
-  url="http://127.0.0.1:$port"
+  secret="$(router_secret || true)"
+  if [[ -z "$secret" ]]; then
+    echo "claude-jev: couldn't make ~/.claude/jev-pilot/router-secret; running without custom models" >&2
+    return 0
+  fi
+  base="http://127.0.0.1:$port"
+  url="$base/$secret"
   # Already behind this router (a nested claude-jev): nothing to do.
   [[ "${ANTHROPIC_BASE_URL:-}" == "$url" ]] && return 0
+  # A router from before 0.8.1 answers anyone, with no secret: it makes way.
+  if [[ -n "$(router_health "$base" || true)" ]]; then
+    if ! router_stop "$base"; then
+      # One from before 0.6 has no stop either: found by its port, and ended
+      # only if it really is jev-router.
+      local pid
+      pid="$(ss -ltnpH "sport = :$port" 2>/dev/null | grep -Eo 'pid=[0-9]+' | head -1 | cut -d= -f2 || true)"
+      if [[ -n "$pid" ]] && tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null | grep -q 'jev-router.mjs'; then kill "$pid" 2>/dev/null || true; fi
+      sleep 0.5
+    fi
+  fi
   health="$(router_health "$url" || true)"
   # A router of another version (left from before an update) makes way.
   wanted="$(grep -Eo "ROUTER_VERSION = '[^']+'" "$script" | head -1 | grep -Eo "'[^']+'" | tr -d "'" || true)"
   running="$(printf '%s' "$health" | grep -Eo '"version":"[^"]+"' | head -1 | cut -d'"' -f4 || true)"
   if [[ -n "$health" && "$running" != "$wanted" ]]; then
-    if ! curl -fsS --max-time 1 -X POST "$url/jev-router/stop" >/dev/null 2>&1; then
-      # A router from before 0.6 has no stop: found by its port, and ended
-      # only if it really is jev-router.
-      local pid
-      pid="$(ss -ltnpH "sport = :$port" 2>/dev/null | grep -Eo 'pid=[0-9]+' | head -1 | cut -d= -f2 || true)"
-      if [[ -n "$pid" ]] && tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null | grep -q 'jev-router.mjs'; then kill "$pid" 2>/dev/null || true; fi
-    fi
-    for _ in 1 2 3 4 5 6 7 8 9 10; do router_health "$url" >/dev/null || break; sleep 0.2; done
+    router_stop "$url" || true
     health=""
   fi
   if [[ -z "$health" ]]; then
@@ -114,12 +163,14 @@ picker_args() {
 
 # `claude-jev router status|stop`: the custom-model router, by hand.
 router_command() {
-  local url="http://127.0.0.1:${JEV_ROUTER_PORT:-8799}" health
+  local url health secret
+  secret="$(router_secret || true)"
+  url="http://127.0.0.1:${JEV_ROUTER_PORT:-8799}/$secret"
   case "${1:-status}" in
     status)
-      if health="$(router_health "$url")"; then echo "jev-router running at $url: $health"; else echo "jev-router not running at $url"; fi ;;
+      if health="$(router_health "$url")"; then echo "jev-router running on port ${JEV_ROUTER_PORT:-8799}: $health"; else echo "jev-router not running on port ${JEV_ROUTER_PORT:-8799}"; fi ;;
     stop)
-      if curl -fsS --max-time 1 -X POST "$url/jev-router/stop" >/dev/null 2>&1; then
+      if router_stop "$url"; then
         echo "jev-router stopped. claude-jev sessions still open reach Claude through it: restart them (the next claude-jev starts it again)."
       else
         echo "jev-router was not running"

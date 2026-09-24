@@ -65,6 +65,9 @@ export function validName(name: string): boolean {
 /** At most this many custom models at once: each is an option in Jev's question. */
 export const MAX_MODELS = 8
 
+/** How many entries a record (the store, models.json) is read for, removed ones included. */
+export const RECORD_LIMIT = 64
+
 /** The names the `alphaModel`/`betaModel`/`gammaModel` settings fill (before names were yours to choose). */
 export const LEGACY_NAMES = ['alpha', 'beta', 'gamma'] as const
 
@@ -108,6 +111,8 @@ export function crewOf(options: Record<string, unknown>, overrides: CrewOverride
   for (const name of LEGACY_NAMES) if (!(name in models)) models[name] = text(`${name}Model`, '')
   const slots: Slot[] = []
   for (const [name, model] of Object.entries(models)) {
+    // A record written elsewhere with more than the limit: the first ones count.
+    if (slots.length >= MAX_MODELS) break
     if (!model || !validName(name)) continue
     const about = overrides.about?.[model]
     slots.push({ name, model, when: text(`${name}When`, '') || DEFAULT_SLOT_WHEN, ...(about ? { about } : {}) })
@@ -137,14 +142,14 @@ export function overridesOf(stored: unknown): CrewOverrides {
   }
   if (raw.models && typeof raw.models === 'object' && !Array.isArray(raw.models)) {
     const models: Record<string, string> = {}
-    for (const [name, value] of Object.entries(raw.models as Record<string, unknown>)) {
+    for (const [name, value] of Object.entries(raw.models as Record<string, unknown>).slice(0, RECORD_LIMIT)) {
       if (validName(name) && typeof value === 'string' && (value.trim() === '' || MODEL_ID.test(value.trim()))) models[name] = value.trim()
     }
     out.models = models
   }
   if (raw.about && typeof raw.about === 'object' && !Array.isArray(raw.about)) {
     const about: Record<string, string> = {}
-    for (const [id, value] of Object.entries(raw.about as Record<string, unknown>)) {
+    for (const [id, value] of Object.entries(raw.about as Record<string, unknown>).slice(0, RECORD_LIMIT)) {
       if (MODEL_ID.test(id) && typeof value === 'string') about[id] = value.slice(0, 200)
     }
     out.about = about
@@ -181,7 +186,7 @@ export function recordedModels(fileText: string | null): Pick<CrewOverrides, 'mo
   if (!slots || typeof slots !== 'object' || Array.isArray(slots)) return null
   const models: Record<string, string> = {}
   const about: Record<string, string> = {}
-  for (const [name, entry] of Object.entries(slots as Record<string, { model?: unknown; about?: unknown } | undefined>)) {
+  for (const [name, entry] of Object.entries(slots as Record<string, { model?: unknown; about?: unknown } | undefined>).slice(0, RECORD_LIMIT)) {
     const model = entry?.model
     if (!validName(name) || typeof model !== 'string' || !(model === '' || MODEL_ID.test(model))) continue
     models[name] = model
@@ -261,10 +266,10 @@ export function parseCrewCommand(args: string): CrewCommand | null {
   const words = args.trim().split(/\s+/).filter(Boolean)
   const head = words[0]?.toLowerCase()
   if (!head) return null
-  if (head === 'models' || head === 'crew') return { kind: 'show' }
+  if (head === 'models' || head === 'crew') return words.length === 1 ? { kind: 'show' } : { kind: 'unknown', text: args.trim() }
   if (head === 'mode') {
     const mode = words[1]?.toLowerCase() as Mode | undefined
-    return mode && MODES.includes(mode) ? { kind: 'mode', mode } : { kind: 'unknown', text: `mode ${words[1] ?? ''}`.trim() }
+    return mode && MODES.includes(mode) && words.length === 2 ? { kind: 'mode', mode } : { kind: 'unknown', text: args.trim() }
   }
   if (head === 'remove' || head === 'delete') {
     const name = words[1]?.toLowerCase()
@@ -272,11 +277,11 @@ export function parseCrewCommand(args: string): CrewCommand | null {
   }
   if (head === 'junior') {
     const name = words[1]?.toLowerCase()
-    return name && validName(name) ? { kind: 'junior', slot: name } : { kind: 'unknown', text: args.trim() }
+    return name && validName(name) && words.length === 2 ? { kind: 'junior', slot: name } : { kind: 'unknown', text: args.trim() }
   }
   if (head === 'reviewer') {
     const reviewer = words[1]?.toLowerCase() as Reviewer | undefined
-    return reviewer && REVIEWERS.includes(reviewer) ? { kind: 'reviewer', reviewer } : { kind: 'unknown', text: args.trim() }
+    return reviewer && REVIEWERS.includes(reviewer) && words.length === 2 ? { kind: 'reviewer', reviewer } : { kind: 'unknown', text: args.trim() }
   }
   if (validName(head)) {
     const input = args.trim().slice(head.length).trim()
@@ -412,9 +417,21 @@ export function reviewerSpec(reviewer: Reviewer, model: string): AgentSpec {
  * The crew's lines for the note to the main model: the mode the user chose,
  * the junior, and the reviewers that are working.
  */
-export function crewNote(crew: Crew, junior: Slot | null, working: Reviewer[]): string[] {
+export function crewNote(crew: Crew, junior: Slot | null, working: Reviewer[], offered: readonly Slot[] = [], workflows = false): string[] {
   const lines: string[] = []
   if (crew.mode !== 'standard') lines.push(`The user chose the ${crew.mode} mode: ${MODE_INFO[crew.mode]}.`)
+  // Workflow agents never pass the Agent tool, so jev-pilot can't route them:
+  // the script sets each one's model (agent(prompt, { model })).
+  if (workflows) {
+    lines.push(
+      "Agents a Workflow script starts (agent()) don't pass through jev-pilot, so choose each one's model in the script with opts.model: 'haiku' for searching, reading and reporting, 'sonnet' for ordinary well-specified work, and leave it out for work that needs judgment.",
+    )
+    if (offered.length > 0) {
+      lines.push(
+        `In this mode, the user wants bulk work on their custom model: for a workflow agent searching, reading and reporting, or doing other work with nothing to judge, use ${offered.map((slot) => `opts.model: '${slotAlias(slot.name)}' (${slot.model})`).join(' or ')} rather than 'haiku'.`,
+      )
+    }
+  }
   if (junior) {
     lines.push(
       `${JUNIOR_AGENT} is a junior developer on ${junior.model}. Give it easy, well-specified coding changes (the files, the exact behavior, the command that proves it); then read its diff and run the tests yourself before calling the work done, and send it back once with your findings if it needs fixing.`,

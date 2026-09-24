@@ -17,7 +17,7 @@
  *            price a custom model, so its tokens are re-priced at OpenRouter's
  *            live price for the slot's model.
  */
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { chmodSync, cpSync, existsSync, linkSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -41,7 +41,27 @@ const userSettings = JSON.parse(readFileSync(join(home, '.claude/settings.json')
 const jevOptions = userSettings.pluginConfigs?.['jev-pilot']?.options ?? {}
 
 // The junior setup goes through jev-router: started here if it isn't running.
-const ROUTER = `http://127.0.0.1:${process.env.JEV_ROUTER_PORT ?? 8799}`
+// Its secret, as claude-jev makes it: every request's path starts with it.
+const secretFile = join(home, '.claude/jev-pilot/router-secret')
+// The same rule as claude-jev's and the router's: made only when there is
+// none (linked in without overwriting, so racing launches share the first
+// one's), never replaced; its text less trailing newlines is exactly 32 hex
+// characters, and it's kept at mode 600.
+const readSecret = () => (existsSync(secretFile) ? readFileSync(secretFile, 'utf8').replace(/\n+$/, '') : '')
+if (setups.includes('junior') && !existsSync(secretFile)) {
+  mkdirSync(join(home, '.claude/jev-pilot'), { recursive: true })
+  const tmp = `${secretFile}.${process.pid}`
+  writeFileSync(tmp, [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, '0')).join(''), { mode: 0o600 })
+  try {
+    linkSync(tmp, secretFile) // fails if another launch made it first: that one stands
+  } catch {}
+  unlinkSync(tmp)
+}
+if (setups.includes('junior') && !/^[0-9a-f]{32}$/.test(readSecret())) {
+  throw new Error('~/.claude/jev-pilot/router-secret is damaged (it must be 32 hex characters): delete it and run again')
+}
+if (existsSync(secretFile)) chmodSync(secretFile, 0o600)
+const ROUTER = `http://127.0.0.1:${process.env.JEV_ROUTER_PORT ?? 8799}/${readSecret()}`
 async function routerUp(): Promise<boolean> {
   return fetch(`${ROUTER}/jev-router/health`).then((r) => r.ok, () => false)
 }

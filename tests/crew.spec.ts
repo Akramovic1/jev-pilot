@@ -520,3 +520,66 @@ test('a custom model that fell back is reported once, and only what is new', asy
   expect(await newFallbacks(io)).toEqual(['coder failed (OpenRouter 503: busy), so claude-sonnet-5 answered instead'])
   expect(await newFallbacks(io)).toEqual([])
 })
+
+test('workflow agents: the note says to set their model in the script, custom models included in budget mode', () => {
+  const crew = crewOf({ mode: 'budget' }, { models: { flash: 'deepseek/deepseek-v4.1-flash' } })
+  const text = crewNote(crew, null, [], crew.slots, true).join('\n')
+  expect(text).toContain('opts.model')
+  expect(text).toContain("opts.model: 'jev-flash' (deepseek/deepseek-v4.1-flash)")
+  expect(crewNote(crewOf({}), null, [], [], true).join('\n')).not.toContain("'jev-")
+  expect(crewNote(crewOf({}), null, [], [], false)).toEqual([])
+})
+
+// ---- the review's fixes ------------------------------------------------------------
+
+test('the router serves only requests under its secret, and never a browser', async () => {
+  // @ts-expect-error: a plain .mjs module
+  const { admit } = await import('../router/jev-router.mjs')
+  const secret = '0123456789abcdef0123456789abcdef'
+  expect(admit(`/${secret}/v1/messages?beta=true`, {}, secret)).toEqual({ path: '/v1/messages?beta=true' })
+  expect(admit(`/${secret}/jev-router/health`, {}, secret)).toEqual({ path: '/jev-router/health' })
+  // No secret, a wrong one, or one that is only a prefix of the path segment: nothing.
+  expect(admit('/v1/messages', {}, secret)).toEqual({ status: 404 })
+  expect(admit('/jev-router/stop', {}, secret)).toEqual({ status: 404 })
+  expect(admit(`/${secret}x/v1/messages`, {}, secret)).toEqual({ status: 404 })
+  // A web page's request (it names an Origin, or the fetch metadata a browser adds): refused.
+  expect(admit(`/${secret}/v1/messages`, { origin: 'https://evil.example' }, secret)).toEqual({ status: 403 })
+  expect(admit(`/${secret}/v1/messages`, { 'sec-fetch-site': 'cross-site' }, secret)).toEqual({ status: 403 })
+  // No secret set up: the router serves nothing.
+  expect(admit('/anything', {}, '')).toEqual({ status: 503 })
+})
+
+test('the router address is shown without its secret', async () => {
+  const { shownUrl } = await import('../hooks/crew-run.ts')
+  expect(shownUrl('http://127.0.0.1:8799/0123456789abcdef0123456789abcdef')).toBe('http://127.0.0.1:8799')
+  expect(shownUrl('http://127.0.0.1:8799')).toBe('http://127.0.0.1:8799')
+})
+
+test('a record written elsewhere with too many models: the first eight count', () => {
+  const models = Object.fromEntries(Array.from({ length: 200 }, (_, i) => [`m${i}`, `p/model-${i}`]))
+  const crew = crewOf({}, overridesOf({ models }))
+  expect(crew.slots.length).toBe(8)
+  expect(crew.slots[0]?.name).toBe('m0')
+  expect(Object.keys(overridesOf({ models }).models ?? {}).length).toBe(64)
+})
+
+test('commands with a fixed number of words refuse extra ones', () => {
+  expect(parseCrewCommand('mode quality garbage')?.kind).toBe('unknown')
+  expect(parseCrewCommand('junior flash garbage')?.kind).toBe('unknown')
+  expect(parseCrewCommand('reviewer codex garbage')?.kind).toBe('unknown')
+  expect(parseCrewCommand('models extra')?.kind).toBe('unknown')
+  expect(parseCrewCommand('remove flash extra')?.kind).toBe('unknown')
+  expect(parseCrewCommand('mode quality')).toEqual({ kind: 'mode', mode: 'quality' })
+})
+
+test('the router takes a models table only when it is one; anything else leaves the last good table', async () => {
+  // @ts-expect-error: a plain .mjs module
+  const { validTable } = await import('../router/jev-router.mjs')
+  expect(validTable({ flash: { model: 'deepseek/deepseek-v4.1-flash', about: 'x' }, old: { model: '' } })).toEqual({
+    flash: { model: 'deepseek/deepseek-v4.1-flash' },
+    old: { model: '' },
+  })
+  for (const bad of [[], 'x', null, { flash: 'deepseek/x' }, { flash: { model: 'not an id' } }, { 'Bad Name': { model: 'a/b' } }, Object.fromEntries(Array.from({ length: 65 }, (_, i) => [`m${i}`, { model: 'a/b' }]))]) {
+    expect(validTable(bad)).toBeNull()
+  }
+})

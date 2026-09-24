@@ -427,7 +427,12 @@ export const register: Register = (on, options) => {
     if (!isTask) return next(e)
     // Once per session, and again after a compaction: what jev-pilot does,
     // for the model, so it leaves those decisions to it.
-    const note = takeBriefing() ? capabilityNote(capabilities(), crewNote(crew(), juniorSlot(crew(), router() !== null), REVIEWERS.filter(reviewerHealthy))) : null
+    const note = takeBriefing()
+      ? capabilityNote(
+          capabilities(),
+          crewNote(crew(), juniorSlot(crew(), router() !== null), REVIEWERS.filter(reviewerHealthy), slotsOffered(crew(), router() !== null).filter(slotUsable), routeSubagentModel()),
+        )
+      : null
     const withNote = (input: typeof e, extra: string | null = null) => {
       const blocks = [extra, note].filter((b): b is string => b !== null)
       return blocks.length > 0 ? { ...input, context: [...(input.context ?? []), ...blocks] } : input
@@ -501,16 +506,20 @@ export const register: Register = (on, options) => {
       })()
       const state = { prompt: e.text, recent_context: recent, signals: signalsOf(e.text, messages) }
       let settled = false
+      let settledBlock: string | null = null
       const part: RouterPart = {
         prompt: e.text,
         ask: async (extra) => {
           const asked = await askJev(io, backend, state, planning, 'the turn', false, [], junior, extra)
           return { ...asked, ms: (await $.clock.now()) - startedAt }
         },
+        // Once: a second settle (never expected) gets the first one's block.
         settle: async (answer) => {
+          if (settled) return settledBlock
           settled = true
           const decision = answer.text === null ? null : readDecision(answer.text)
-          return finish(decision, answer.text !== null && !decision ? 'error' : answer.miss, answer.ms)
+          settledBlock = await finish(decision, answer.text !== null && !decision ? 'error' : answer.miss, answer.ms)
+          return settledBlock
         },
       }
       offerPart(part)

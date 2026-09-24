@@ -25,6 +25,11 @@ export interface CrewIo {
 
 export const CREW_KEY = 'crew'
 
+/** The router's address as shown to you: without the secret in its path. */
+export function shownUrl(url: string): string {
+  return url.replace(/\/[0-9a-f]{16,}$/i, '')
+}
+
 /** Where the router reads the slots from. */
 export async function modelsFile(io: CrewIo): Promise<string> {
   const home = (await io.home()) ?? '~'
@@ -64,7 +69,7 @@ export async function startCrew(io: CrewIo): Promise<void> {
   if (url) {
     const answer = await within(io, 1500, io.fetch(`${url}/jev-router/health`, { method: 'GET' }).catch(() => null))
     const ok = !!answer && answer.ok
-    setHealth('router', { ok, detail: ok ? url : `no answer at ${url}`, at: Date.now() })
+    setHealth('router', { ok, detail: ok ? shownUrl(url) : `no answer at ${shownUrl(url)}`, at: Date.now() })
     if (ok) setRouter(url)
   }
   await publishSlots(io).catch(() => undefined)
@@ -116,10 +121,10 @@ export async function checkRouter(io: CrewIo): Promise<void> {
   if (!url) return
   const answer = await within(io, 1500, io.fetch(`${url}/jev-router/health`, { method: 'GET' }).catch(() => null))
   if (!answer || !answer.ok) {
-    setHealth('router', { ok: false, detail: `no answer at ${url}`, at: Date.now() })
+    setHealth('router', { ok: false, detail: `no answer at ${shownUrl(url)}`, at: Date.now() })
     return
   }
-  setHealth('router', { ok: true, detail: `${url}${fallbackNote(answer.text)}`, at: Date.now() })
+  setHealth('router', { ok: true, detail: `${shownUrl(url)}${fallbackNote(answer.text)}`, at: Date.now() })
 }
 
 /** "· alpha fell back to claude-sonnet-5 2× (OpenRouter 503)", from the router's health answer. */

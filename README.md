@@ -260,6 +260,8 @@ jev-pilot looks the model up in OpenRouter's live list, adds it and says what it
 
 Changes apply from the next turn. The modes that use custom models (`budget`, `junior-lead`) say so when none is added yet.
 
+**Workflows.** Agents a workflow script starts don't go through the Agent tool, so jev-pilot can't pick their model the way it does for subagents. Instead, the note Claude gets tells it to set each workflow agent's model in the script (`opts.model`): `haiku` for searching and reading, `sonnet` for ordinary well-specified work, and in `budget` mode your custom model for bulk work. Tested: in budget mode, both agents of a small reading workflow ran on DeepSeek, and the result was correct.
+
 **Your models in `/model`.** Each model you add is a row in Claude Code's `/model` list, as `<name> · <model name>` with its price, in `claude-jev` sessions (where the router is there to serve it). Pick it to run the whole conversation on it.
 - **This session only:** press `s` on the row. Enter, or typing `/model jev-<name>`, also makes it your default for new sessions, and plain `claude` sessions have no router to serve it. Where jev-pilot is loaded without the router (a marketplace install started as plain `claude`), it uses Sonnet instead and says so. A plain `claude` without jev-pilot just reports the model isn't found. `/model default` sets your default back.
 - **New rows show from your next `claude-jev` session.** Claude Code reads the list when it starts. In the session where you added the model, `/model jev-<name>` works straight away.
@@ -290,6 +292,8 @@ Claude Code talks to one server. `claude-jev` starts **jev-router**, a small loc
 The router reads the slots from `~/.claude/jev-pilot/models.json`, which jev-pilot writes, so `/jev <name> <model>` applies at once. It logs which slot went where (never the content) to `~/.claude/jev-pilot/router.log`. `claude-jev` also sets `ENABLE_TOOL_SEARCH=true`: without it, Claude Code sends every tool's schema with every request when it talks to a custom server.
 
 **A custom model that fails never fails your work.** If OpenRouter is down or busy, the model is gone, or it doesn't start answering within 60 s, the router sends the same request to Anthropic as Sonnet, with the session's own login. It uses the Sonnet id it has seen in your own traffic and kept on disk, so no model version is written into it. `/jev status` shows each fallback and its reason. Only a failure after the answer has started streaming can't be taken back.
+
+**Only your claude-jev sessions can use it.** Every request has to come under a secret path (`127.0.0.1:8799/<secret>/…`). The secret is made once in `~/.claude/jev-pilot/router-secret`, readable by you alone, and `claude-jev` puts it in the address it gives Claude Code. Anything else gets a plain 404, and a request from a web page (a browser marks it with `Origin`) gets a 403. Without this, another program on your machine, or any web page open in your browser, could spend your OpenRouter credit through the router or stop it. `/jev status` shows the address without the secret.
 
 **It stays up.** The router runs in its own session under a small supervisor. Closing the terminal that started it doesn't stop it, since other `claude-jev` sessions depend on it, and if it crashes it's back within a second. After an update, `claude-jev` replaces a router of an older version.
 
