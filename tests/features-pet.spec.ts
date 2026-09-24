@@ -9,7 +9,7 @@ import {
   parseJevCommand,
   setFeature,
 } from '../hooks/features.ts'
-import { type Act, actOfTool, BODY_W, CANVAS_H, PALETTE, SCARF_CYCLE, CANVAS_W, PLAY_FRAMES, PLAYS, scenePixels, sceneRows, turnSpeech } from '../hooks/pet-art.ts'
+import { type Act, actOfTool, BODY_W, CANVAS_H, subagentLabel, PALETTE, SCARF_CYCLE, CANVAS_W, PLAY_FRAMES, PLAYS, scenePixels, sceneRows, turnSpeech } from '../hooks/pet-art.ts'
 
 const allOn = { effort: true, raise: true, subagents: true, skills: true, strategy: true, model: false, pet: true }
 
@@ -202,4 +202,14 @@ test('goggles come down over the eyes when flying, or at full power in any pose'
   // The goggles cover the eyes, and the book is still in hand.
   expect(reading.join('')).not.toContain('E')
   expect(reading.join('')).toMatch(/B/)
+})
+
+test('a subagent is named by its task in the bubble, not its generic type', () => {
+  expect(subagentLabel('Fix S2a Codex findings', 'general-purpose')).toBe('Fix S2a Codex findings')
+  expect(subagentLabel('  Build   plan 3\ntasks 1-4 ', 'general-purpose')).toBe('Build plan 3 tasks 1-4')
+  const long = subagentLabel('Write the talent-match plan 4 for the casting dashboard', 'general-purpose')
+  expect(long.length).toBe(32)
+  expect(long.endsWith('…')).toBe(true)
+  expect(subagentLabel('', 'Explore')).toBe('Explore')
+  expect(subagentLabel(undefined, 'Explore')).toBe('Explore')
 })

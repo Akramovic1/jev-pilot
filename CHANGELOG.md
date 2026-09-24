@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.10 — 2026-09-24
+
+- **Subagents are named by their task.** The bubble and the log use the subagent's short task description instead of its generic type, and show its model and effort together: `Fix S2a Codex findings → sonnet · high` instead of `general-purpose → high`.
+
 ## 0.4.9 — 2026-09-24
 
 - **xhigh only when Jev is sure.** Close calls still lean up, but only as far as `high`. `xhigh` now needs Jev at least 60% sure the task is very hard (`xhigh` and `max` together), so a near split between hard and very hard stays at `high`.

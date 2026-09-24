@@ -45,6 +45,17 @@ export function isBoosted(): boolean {
   return boosted
 }
 
+/**
+ * A subagent's name in the bubble: its task's short description (the Agent
+ * tool's `description`, e.g. "Fix S2a Codex findings"), cut to fit; its type
+ * (`general-purpose`, `Explore`) when it has none.
+ */
+export function subagentLabel(description: string | undefined, type: string, max = 32): string {
+  const text = (description ?? '').replace(/\s+/g, ' ').trim()
+  if (!text) return type
+  return text.length <= max ? text : `${text.slice(0, max - 1).trimEnd()}…`
+}
+
 /** The mood an effort level reads as. */
 export function moodOf(effort: string | null): Mood {
   if (effort === 'low' || effort === 'medium') return 'calm'
