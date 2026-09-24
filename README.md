@@ -220,7 +220,7 @@ Switches are remembered across sessions. `/jev skills off` leaves skills exactly
 
 jev-pilot can bring more workers into a Claude Code session than Claude alone:
 
-- **Custom models:** three slots, `alpha`, `beta` and `gamma`, each holding any [OpenRouter model](https://openrouter.ai/models?supported_parameters=tools) you choose. None is set until you set it.
+- **Custom models:** any [OpenRouter model](https://openrouter.ai/models?supported_parameters=tools) you add, under a name you choose (up to 8). None is set until you add one.
 - **Codex and OpenCode:** your own `codex` and `opencode` CLIs, with your own logins, as code reviewers. They run as themselves, not through OpenRouter.
 
 **You choose how they're used** with a mode. Within that mode, Jev decides task by task.
@@ -235,29 +235,35 @@ jev-pilot can bring more workers into a Claude Code session than Claude alone:
 
 Outside these modes you can still ask for a review at any time: *"have Codex review this"*. Claude then spawns `jev-pilot:codex-review`.
 
-**Setting a model.** Find one on [OpenRouter's list of models that can call tools](https://openrouter.ai/models?supported_parameters=tools) and paste it after the slot's name. The id, the page link or the name all work:
+**Adding a model.** Pick a name, find a model on [OpenRouter's list of models that can call tools](https://openrouter.ai/models?supported_parameters=tools), and paste it after the name. The id, the page link or the model's name all work:
 
 ```
-/jev alpha deepseek/deepseek-v4.1-flash
-/jev alpha https://openrouter.ai/deepseek/deepseek-v4.1-flash
-/jev alpha DeepSeek: DeepSeek V4.1 Flash
+/jev flash deepseek/deepseek-v4.1-flash
+/jev coder https://openrouter.ai/qwen/qwen3-coder
+/jev cheap DeepSeek: DeepSeek V4.1 Flash
 ```
 
-jev-pilot looks it up in OpenRouter's live list, then sets it and says what it is: `alpha is now deepseek/deepseek-v4.1-flash (DeepSeek: DeepSeek V4.1 Flash · 1M context · $0.14 in · $0.42 out per million tokens)`. It then checks the model answers.
-- **Refused:** a model OpenRouter doesn't have gets the three closest ones to try instead. So does one that can't call tools, since a subagent works through tools.
-- **Kept for every session:** the choice is recorded in `~/.claude/jev-pilot/models.json`, which every session reads, in any project and whichever way jev-pilot is installed. A session that's already open takes up the change at its next prompt.
+jev-pilot looks the model up in OpenRouter's live list, adds it and says what it is: `coder is now qwen/qwen3-coder (Qwen: Qwen3 Coder 480B A35B · 262k context · $0.3 in · $1 out per million tokens)`. Then it checks the model answers.
+- **Refused:** a model OpenRouter doesn't have gets the three closest ones to try, newest first. So does one that can't call tools, since Claude Code works through tools.
+- **Names:** lowercase letters, digits and `-`, starting with a letter. Words `/jev` already uses (`status`, `mode`, `skills`…) can't be names.
+- **Kept for every session:** the models are recorded in `~/.claude/jev-pilot/models.json`, which every session reads, in any project and whichever way jev-pilot is installed. A session that's already open takes up a change at its next prompt.
 
 ```
-/jev alpha                           the slot: its model, and the models you set before (to switch back)
-/jev beta <model>                    set a slot (gamma likewise); a new paste replaces the old model
-/jev beta off                        empty a slot
-/jev status                          the mode, the slots, and a health check of every worker
+/jev <name> <model>                  add a model, or replace the one under that name
+/jev <name>                          that model, and the models you added before (to switch back)
+/jev remove <name>                   delete it, from every session and from /model (also: /jev <name> off)
+/jev status                          the mode, your models, and a health check of every worker
 /jev mode junior-lead                standard · budget · junior-lead · second-opinion · quality
-/jev junior beta                     which slot the junior runs on
+/jev junior <name>                   which model the junior runs on (else the first you added)
 /jev reviewer opencode               which agent reviews: codex or opencode
 ```
 
-Changes apply from the next turn. The modes that use custom models (`budget`, `junior-lead`) say so when no slot is set yet.
+Changes apply from the next turn. The modes that use custom models (`budget`, `junior-lead`) say so when none is added yet.
+
+**Your models in `/model`.** Each model you add is a row in Claude Code's `/model` list, as `<name> · <model name>` with its price, in `claude-jev` sessions (where the router is there to serve it). Pick it to run the whole conversation on it.
+- **This session only:** press `s` on the row. Enter, or typing `/model jev-<name>`, also makes it your default for new sessions, and plain `claude` sessions have no router to serve it. Where jev-pilot is loaded without the router (a marketplace install started as plain `claude`), it uses Sonnet instead and says so. A plain `claude` without jev-pilot just reports the model isn't found. `/model default` sets your default back.
+- **New rows show from your next `claude-jev` session.** Claude Code reads the list when it starts. In the session where you added the model, `/model jev-<name>` works straight away.
+- **It calls itself Claude.** Claude Code's system prompt tells every model it's Claude, so a custom model often says so. The router log (`~/.claude/jev-pilot/router.log`) shows which model really answered.
 
 **Every worker is checked** when the session starts and on `/jev status`:
 
@@ -278,10 +284,10 @@ A custom model has to answer a 1-token request, Codex has to be logged in, and O
 
 Claude Code talks to one server. `claude-jev` starts **jev-router**, a small local proxy on `127.0.0.1:8799` with no dependencies, and points Claude Code at it:
 
-- A request for `jev-alpha`, `jev-beta` or `jev-gamma` goes to that slot's model on OpenRouter, which speaks the same Anthropic Messages format, tool calls included. It's sent with your OpenRouter key.
+- A request for `jev-<name>` goes to the model you added under that name, on OpenRouter, which speaks the same Anthropic Messages format, tool calls included. It's sent with your OpenRouter key.
 - Every other request streams through to Anthropic unchanged, headers and all, so your Claude login and plan work exactly as before. The OpenRouter key never goes to Anthropic, and your Claude login never goes to OpenRouter.
 
-The router reads the slots from `~/.claude/jev-pilot/models.json`, which jev-pilot writes, so `/jev alpha <model>` applies at once. It logs which slot went where (never the content) to `~/.claude/jev-pilot/router.log`. `claude-jev` also sets `ENABLE_TOOL_SEARCH=true`: without it, Claude Code sends every tool's schema with every request when it talks to a custom server.
+The router reads the slots from `~/.claude/jev-pilot/models.json`, which jev-pilot writes, so `/jev <name> <model>` applies at once. It logs which slot went where (never the content) to `~/.claude/jev-pilot/router.log`. `claude-jev` also sets `ENABLE_TOOL_SEARCH=true`: without it, Claude Code sends every tool's schema with every request when it talks to a custom server.
 
 **A custom model that fails never fails your work.** If OpenRouter is down or busy, the model is gone, or it doesn't start answering within 60 s, the router sends the same request to Anthropic as Sonnet, with the session's own login. It uses the Sonnet id it has seen in your own traffic and kept on disk, so no model version is written into it. `/jev status` shows each fallback and its reason. Only a failure after the answer has started streaming can't be taken back.
 
@@ -368,9 +374,9 @@ Every option has a sensible default. On a marketplace install, change options wi
 | `suggestSkills` | true | pick one skill per prompt; off leaves skills as Claude Code handles them |
 | `logDecisions` | true | master switch for jev-pilot's messages in the conversation (errors always show) |
 | `mode` | `standard` | how the [crew](#-the-crew-custom-models-and-other-agents) is used: `standard`, `budget`, `junior-lead`, `second-opinion`, `quality` |
-| `alphaModel` / `betaModel` / `gammaModel` | not set | the custom model slots as settings; `/jev <slot> <model>` is easier and wins over these |
-| `alphaWhen` / `betaWhen` / `gammaWhen` | bulk work with nothing to judge | when Jev should choose that slot, in plain words |
-| `junior` / `reviewer` | `alpha` / `codex` | the junior's slot, and the external reviewer (`codex` or `opencode`) |
+| `alphaModel` / `betaModel` / `gammaModel` | not set | custom models named alpha, beta and gamma as settings (from before names were yours to choose); `/jev <name> <model>` is easier and wins over these |
+| `<name>When` | bulk work with nothing to judge | when Jev should choose the model you added as `<name>`, in plain words (e.g. `flashWhen`) |
+| `junior` / `reviewer` | the first model you added / `codex` | the junior's model by name, and the external reviewer (`codex` or `opencode`) |
 
 All options are listed, with descriptions, in [`.claude-plugin/plugin.json`](.claude-plugin/plugin.json).
 
@@ -405,6 +411,7 @@ All options are listed, with descriptions, in [`.claude-plugin/plugin.json`](.cl
 
   Tool input and output are never sent. `contextMessages: 0` sends no conversation.
 - **The crew:** a custom model gets the subagent's whole conversation, through OpenRouter, like any model would. A reviewer runs the `codex` or `opencode` CLI on your machine, which reads your code and talks to its own provider with your own login. Neither happens in `standard` mode unless you ask for a review.
+- **What a custom model is sent:** the conversation and the tools, as any model would get them. Claude Code also adds fields meant only for Anthropic: your account and device ids (`metadata`), your permission rules and project notes (`safeguards`), and context-management settings. The router removes those before a request goes to OpenRouter. If the request falls back to Claude, it goes to Anthropic unchanged.
 
 ## ⚖️ What it will and won't do
 

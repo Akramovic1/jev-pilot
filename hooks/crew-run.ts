@@ -5,7 +5,7 @@
  * the hook. Checks are cheap: a 1-token call per custom model on OpenRouter,
  * `codex login status`, `opencode --version` and `opencode auth list`.
  */
-import { juniorSlot, juniorSpec, overridesOf, recordedModels, REVIEWERS, reviewerSpec, routerTable, slotAlias, type AgentSpec, type OpenRouterModel } from './crew.ts'
+import { aboutModel, juniorSlot, juniorSpec, overridesOf, pickerSettings, recordedModels, REVIEWERS, reviewerSpec, routerTable, slotAlias, type AgentSpec, type OpenRouterModel } from './crew.ts'
 import { codexVerdict, crew, crewOverrides, crewStarted, markCrewStarted, opencodeVerdict, reviewerHealthy, router, setCrewOverrides, setHealth, setRouter } from './crew-state.ts'
 
 export interface CrewIo {
@@ -31,12 +31,22 @@ export async function modelsFile(io: CrewIo): Promise<string> {
   return `${home}/.claude/jev-pilot/models.json`
 }
 
-/** Writes the router's table, and the record of what's set, from the crew as it stands now. */
-export async function publishSlots(io: CrewIo): Promise<void> {
-  await io.write(await modelsFile(io), routerTable(crew(), crewOverrides().recent ?? []))
+/** The `/model` rows `claude-jev` passes to Claude Code with `--settings`. */
+export async function pickerFile(io: CrewIo): Promise<string> {
+  const home = (await io.home()) ?? '~'
+  return `${home}/.claude/jev-pilot/picker.json`
 }
 
-async function within<T>(io: CrewIo, ms: number, work: Promise<T>): Promise<T | null> {
+/**
+ * Writes the router's table and the record of what's set (models.json), and
+ * the `/model` rows (picker.json), from the crew as it stands now.
+ */
+export async function publishSlots(io: CrewIo): Promise<void> {
+  await io.write(await modelsFile(io), routerTable(crew(), crewOverrides()))
+  await io.write(await pickerFile(io), pickerSettings(crew()))
+}
+
+async function within<T>(io: Pick<CrewIo, 'sleep'>, ms: number, work: Promise<T>): Promise<T | null> {
   return Promise.race([work, io.sleep(ms).then(() => null)])
 }
 
@@ -125,9 +135,30 @@ export function fallbackNote(healthText: string): string {
   }
 }
 
-/** Every check, in parallel. */
+/** Every check, in parallel; then what OpenRouter says each model is, where that's missing. */
 export async function checkCrew(io: CrewIo, key: string | null): Promise<void> {
   await Promise.all([...crew().slots.map((slot) => checkSlot(io, key, slot.name, slot.model)), checkAgents(io), checkRouter(io)])
+  await fillAbout(io).catch(() => undefined)
+}
+
+/**
+ * A model set without its description (before descriptions were kept, or
+ * while OpenRouter's list was out of reach): looked up once it's there, for
+ * `/model` and `/jev status`.
+ */
+export async function fillAbout(io: CrewIo): Promise<void> {
+  const missing = crew().slots.filter((slot) => !slot.about)
+  if (missing.length === 0) return
+  const catalog = await modelCatalog(io)
+  if (!catalog) return
+  const about = { ...(crewOverrides().about ?? {}) }
+  for (const slot of missing) {
+    const found = catalog.find((model) => model.id === slot.model)
+    if (found) about[slot.model] = aboutModel(found)
+  }
+  if (Object.keys(about).length === Object.keys(crewOverrides().about ?? {}).length) return
+  setCrewOverrides({ ...crewOverrides(), about })
+  await publishSlots(io)
 }
 
 /** The small Claude model a reviewer runs on: it only relays. */
@@ -172,7 +203,8 @@ export async function refreshModels(io: CrewIo, key: string | null): Promise<voi
   if (!recorded) return
   const current = crewOverrides()
   const before = crew().slots
-  if (JSON.stringify(recorded.models ?? {}) === JSON.stringify(current.models ?? {}) && JSON.stringify(recorded.recent ?? []) === JSON.stringify(current.recent ?? [])) return
+  const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
+  if (same(recorded.models, current.models) && same(recorded.recent, current.recent) && same(recorded.about, current.about)) return
   setCrewOverrides({ ...current, ...recorded })
   for (const slot of crew().slots) {
     if (!before.some((b) => b.name === slot.name && b.model === slot.model)) void checkSlot(io, key, slot.name, slot.model).catch(() => undefined)
@@ -197,5 +229,29 @@ export async function modelCatalog(io: CrewIo): Promise<OpenRouterModel[] | null
     return catalogCache.models
   } catch {
     return null
+  }
+}
+
+let fallbacksSeen: number | null = null
+
+/**
+ * New fallbacks since the last look: each custom model that failed and was
+ * answered by Claude instead, with why. Empty on the first look (it only
+ * counts from there) and when the router isn't answering.
+ */
+export async function newFallbacks(io: Pick<CrewIo, 'fetch' | 'sleep'>): Promise<string[]> {
+  const url = router()
+  if (!url) return []
+  const answer = await within(io, 800, io.fetch(`${url}/jev-router/health`, { method: 'GET' }).catch(() => null))
+  if (!answer || !answer.ok) return []
+  try {
+    const fallbacks = (JSON.parse(answer.text) as { fallbacks?: Record<string, { count?: number; to?: string; why?: string }> }).fallbacks ?? {}
+    const total = Object.values(fallbacks).reduce((sum, f) => sum + (typeof f?.count === 'number' ? f.count : 0), 0)
+    const before = fallbacksSeen
+    fallbacksSeen = total
+    if (before === null || total <= before) return []
+    return Object.entries(fallbacks).map(([name, f]) => `${name} failed (${String(f.why ?? '').slice(0, 90)}), so ${f.to ?? 'Claude'} answered instead`)
+  } catch {
+    return []
   }
 }

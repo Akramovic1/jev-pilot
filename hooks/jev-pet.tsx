@@ -28,7 +28,7 @@ import {
   parseJevCommand,
   setFeature,
 } from './features.ts'
-import { applyCrewCommand, describeCrew, describeSlot, MODELS_PAGE, parseCrewCommand, resolveModel, type CrewCommand } from './crew.ts'
+import { applyCrewCommand, describeCrew, describeSlot, MAX_MODELS, MODELS_PAGE, parseCrewCommand, resolveModel, slotAlias, type CrewCommand } from './crew.ts'
 import { resetBriefing } from './summary.ts'
 import { describeStats } from './session-stats.ts'
 import { entriesOf, LEDGER_KEY } from './ledger.ts'
@@ -249,8 +249,15 @@ export const register: Register = (on, options) => {
           const tries = resolved.suggestions.length > 0 ? `\nDid you mean:\n${resolved.suggestions.map((id) => `  /jev ${crewCommand.slot} ${id}`).join('\n')}` : ''
           return { text: `${crewCommand.slot} not changed: ${resolved.why}.${tries}\nFind one at ${MODELS_PAGE} and paste its id, link or name.` }
         }
-        change = { kind: 'model', slot: crewCommand.slot, model: resolved.id }
+        // A new name past the limit: each custom model is an option Jev weighs.
+        if (!crew().slots.some((slot) => slot.name === crewCommand.slot) && crew().slots.length >= MAX_MODELS) {
+          return { text: `${crewCommand.slot} not added: ${MAX_MODELS} custom models is the most at once. Remove one first: /jev remove <name>` }
+        }
+        change = { kind: 'model', slot: crewCommand.slot, model: resolved.id, about: resolved.about }
         about = resolved.about
+      }
+      if (change.kind === 'model' && !change.model && !crew().slots.some((slot) => slot.name === change.slot)) {
+        return { text: `No custom model is called ${change.slot}.\n\n${describeCrew(crew(), router() !== null)}` }
       }
       setCrewOverrides(applyCrewCommand(crewOverrides(), change))
       await $.store.set(CREW_KEY, crewOverrides()).catch((error) => $.ui.log(`[jev-pilot] crew not saved: ${String(error)}`))
@@ -263,13 +270,14 @@ export const register: Register = (on, options) => {
       const headline =
         change.kind === 'model'
           ? change.model
-            ? `${change.slot} is now ${change.model}${about ? ` (${about})` : ''}. Saved: every session uses it until you change it.\n\n`
-            : `${change.slot} is off.\n\n`
+            ? `${change.slot} is now ${change.model}${about ? ` (${about})` : ''}. Saved for every session.\n` +
+              `It's in /model from your next claude-jev session (press s there to use it for that session only). To use it as the main model right now: /model ${slotAlias(change.slot)}. That also makes it your default for new sessions, and /model default undoes that.\n\n`
+            : `${change.slot} is removed, from every session and from /model.\n\n`
           : ''
       // A mode that hands work to custom models, with none set: say how to set one.
       const unset =
         change.kind === 'mode' && (change.mode === 'budget' || change.mode === 'junior-lead') && crew().slots.length === 0
-          ? `\n\nNo custom model is set yet, so this mode has nothing to hand work to. Paste one from ${MODELS_PAGE}:\n  /jev alpha <model>`
+          ? `\n\nNo custom model is set yet, so this mode has nothing to hand work to. Add one from ${MODELS_PAGE}:\n  /jev <name you choose> <model>`
           : ''
       return { text: `${headline}${describeCrew(crew(), router() !== null)}\n${describeHealth()}${unset}` }
     }

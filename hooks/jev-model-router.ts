@@ -62,7 +62,7 @@ import { moodOf, say, setBoost, subagentLabel, turnSpeech } from './pet-art.ts'
 import { feature } from './features.ts'
 import { crewNote, JUNIOR_AGENT, juniorSlot, REVIEWERS, reviewerAgent, slotAlias, slotsOffered } from './crew.ts'
 import { crew, reviewerHealthy, router, slotUsable } from './crew-state.ts'
-import { ensureCrew, startSession, type CrewIo } from './crew-run.ts'
+import { ensureCrew, newFallbacks, startSession, type CrewIo } from './crew-run.ts'
 import { isContinuation, offerPart, stillOffered, type RouterPart } from './jev-call.ts'
 import { recordSubagent, recordSubagentUsage, recordTurn, resetStats, shortStats } from './session-stats.ts'
 import type { ContextMessage } from './context.ts'
@@ -348,6 +348,8 @@ export const register: Register = (on, options) => {
   // The main loop's tool calls that failed in a row since its last success,
   // counted as they finish (tool.call) and cleared when a turn starts.
   let failedInARow = 0
+  // Said once: a custom model asked for with no router to serve it.
+  let warnedNoRouter = false
   // The last decision Jev made for a typed prompt: "continue" goes on with it.
   let lastDecision: Decision | null = null
   // Each family's current full id, learned from the requests the engine makes.
@@ -556,6 +558,18 @@ export const register: Register = (on, options) => {
     // Every request names the id the engine resolved for it, a subagent's
     // included: that is where the main loop's switch finds its ids.
     ids.learn(e.model)
+    // A custom model where no router serves it (a plain `claude` session
+    // whose default was set to jev-…): Sonnet instead of a request that fails.
+    if (/^jev-/.test(e.model ?? '') && router() === null) {
+      const id = requestModelId(policy.tiers.balanced, ids)
+      if (id) {
+        if (!warnedNoRouter) {
+          warnedNoRouter = true
+          $.ui.log(`jev · ${e.model} needs claude-jev (its router isn't running here), so this session uses ${id}. /model default sets your default back.`)
+        }
+        return yield* next({ ...e, model: id })
+      }
+    }
     // A subagent's request: the effort it was routed to when it started,
     // settled at its first request (from the effort the engine built it with)
     // and kept for the rest of its run.
@@ -780,6 +794,18 @@ export const register: Register = (on, options) => {
       subagents.delete(e.agentId)
       subagentEffort.delete(e.agentId)
       recordSubagentUsage(e.agentId, e.usage as Record<string, unknown> | null | undefined)
+    }
+    // A custom model that failed during the turn: said, since Claude's answer hides it.
+    if (!e.agentId && crew().slots.length > 0 && router()) {
+      const failed = await newFallbacks({
+        fetch: (url, init) => $.http.fetch(url, init),
+        sleep: (ms) => $.clock.sleep(ms),
+      })
+      for (const line of failed) $.ui.log(`jev · ${line}. /jev status shows the details`)
+      if (failed.length > 0 && petOn()) {
+        say('custom model failed · Claude answered', 'alert')
+        $.ui.invalidate('ui.render')
+      }
     }
     if (!e.agentId && current && current.turnId === e.turnId) {
       const { turnId: _turnId, ...entry } = current

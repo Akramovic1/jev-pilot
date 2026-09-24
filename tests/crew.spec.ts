@@ -7,7 +7,6 @@ import {
   juniorSpec,
   reviewerAgent,
   reviewerSpec,
-  DEFAULT_SLOTS,
   describeCrew,
   juniorSlot,
   overridesOf,
@@ -29,8 +28,7 @@ test('by default: standard mode, no custom model set (you choose one), Codex rev
   const crew = crewOf({})
   expect(crew.mode).toBe('standard')
   expect(crew.slots).toEqual([])
-  for (const name of ['alpha', 'beta', 'gamma'] as const) expect(DEFAULT_SLOTS[name].model).toBe('')
-  expect(crew.junior).toBe('alpha')
+  expect(crew.junior).toBe('')
   expect(crew.reviewer).toBe('codex')
 })
 
@@ -46,24 +44,27 @@ test('options set the slots and their descriptions; /jev changes win over the op
 
 test('/jev commands about the crew parse; anything else is left to the switches', () => {
   expect(parseCrewCommand('mode budget')).toEqual({ kind: 'mode', mode: 'budget' })
-  // What follows a slot's name is a paste, checked against OpenRouter's list before it's set.
-  expect(parseCrewCommand('alpha deepseek/deepseek-v4.1-flash')).toEqual({ kind: 'paste', slot: 'alpha', input: 'deepseek/deepseek-v4.1-flash' })
-  expect(parseCrewCommand('beta DeepSeek: DeepSeek V4.1 Flash')).toEqual({ kind: 'paste', slot: 'beta', input: 'DeepSeek: DeepSeek V4.1 Flash' })
-  expect(parseCrewCommand('gamma off')).toEqual({ kind: 'model', slot: 'gamma', model: '' })
-  expect(parseCrewCommand('alpha')).toEqual({ kind: 'slot', slot: 'alpha' })
-  expect(parseCrewCommand('junior beta')).toEqual({ kind: 'junior', slot: 'beta' })
+  // Any name you choose; what follows it is a paste, checked against OpenRouter's list before it's set.
+  expect(parseCrewCommand('flash deepseek/deepseek-v4.1-flash')).toEqual({ kind: 'paste', slot: 'flash', input: 'deepseek/deepseek-v4.1-flash' })
+  expect(parseCrewCommand('Coder DeepSeek: DeepSeek V4.1 Flash')).toEqual({ kind: 'paste', slot: 'coder', input: 'DeepSeek: DeepSeek V4.1 Flash' })
+  expect(parseCrewCommand('my-coder off')).toEqual({ kind: 'model', slot: 'my-coder', model: '' })
+  expect(parseCrewCommand('flash')).toEqual({ kind: 'slot', slot: 'flash' })
+  expect(parseCrewCommand('junior coder')).toEqual({ kind: 'junior', slot: 'coder' })
   expect(parseCrewCommand('reviewer opencode')).toEqual({ kind: 'reviewer', reviewer: 'opencode' })
   expect(parseCrewCommand('models')).toEqual({ kind: 'show' })
   expect(parseCrewCommand('mode turbo')?.kind).toBe('unknown')
+  // A switch is never taken for a model's name.
   expect(parseCrewCommand('skills off')).toBeNull()
+  expect(parseCrewCommand('all on')).toBeNull()
+  expect(parseCrewCommand('reset')).toBeNull()
   expect(parseCrewCommand('')).toBeNull()
 })
 
 test('commands apply to the overrides, and the store round-trips them; junk is dropped', () => {
   let overrides = applyCrewCommand({}, { kind: 'mode', mode: 'budget' })
-  overrides = applyCrewCommand(overrides, { kind: 'model', slot: 'beta', model: 'qwen/qwen-4-coder' })
+  overrides = applyCrewCommand(overrides, { kind: 'model', slot: 'coder', model: 'qwen/qwen-4-coder', about: 'Qwen: Qwen 4 Coder' })
   expect(overridesOf(JSON.parse(JSON.stringify(overrides)))).toEqual(overrides)
-  expect(overridesOf({ mode: 'turbo', junior: 'delta', reviewer: 'bard', models: { alpha: 3 } })).toEqual({ models: {} })
+  expect(overridesOf({ mode: 'turbo', junior: 'Not A Name', reviewer: 'bard', models: { alpha: 3, skills: 'a/b', 'Bad Name': 'a/b', ok: 'not an id' } })).toEqual({ models: {} })
   expect(overridesOf('nonsense')).toEqual({})
 })
 
@@ -81,9 +82,10 @@ test('custom models are offered only in the modes that use them, and only with t
 })
 
 test('the router table names each slot and its model (unset ones as ""), the models set before, and nothing else (no keys)', () => {
-  const table = JSON.parse(routerTable(crewOf({ alphaModel: 'deepseek/deepseek-v4.1-flash', betaModel: 'qwen/qwen-4-coder' }), ['qwen/qwen-4-coder']))
+  const overrides = { models: { flash: 'deepseek/deepseek-v4.1-flash', old: '' }, recent: ['qwen/qwen-4-coder'], about: { 'deepseek/deepseek-v4.1-flash': 'DeepSeek: DeepSeek V4.1 Flash · $0.14 in' } }
+  const table = JSON.parse(routerTable(crewOf({}, overrides), overrides))
   expect(table).toEqual({
-    slots: { alpha: { model: 'deepseek/deepseek-v4.1-flash' }, beta: { model: 'qwen/qwen-4-coder' }, gamma: { model: '' } },
+    slots: { old: { model: '' }, flash: { model: 'deepseek/deepseek-v4.1-flash', about: 'DeepSeek: DeepSeek V4.1 Flash · $0.14 in' } },
     recent: ['qwen/qwen-4-coder'],
   })
   expect(slotAlias('alpha')).toBe('jev-alpha')
@@ -93,7 +95,8 @@ test('/jev status shows the mode, every slot and the reviewer', () => {
   const text = describeCrew(crewOf({ mode: 'budget', alphaModel: 'deepseek/deepseek-v4.1-flash' }), false)
   expect(text).toContain('mode: budget')
   expect(text).toContain('alpha  deepseek/deepseek-v4.1-flash')
-  expect(text).toContain('beta   not set')
+  expect(text).not.toContain('beta')
+  expect(describeCrew(crewOf({}), false)).toContain('none yet')
   expect(text).toContain('router not running')
   expect(text).toContain('reviewer: codex')
 })
@@ -352,26 +355,27 @@ test('each model set is remembered, newest first, so switching back is one comma
   expect(text).toContain('alpha: c/three')
   expect(text).toContain('/jev alpha a/one')
   expect(text).not.toContain('/jev alpha c/three')
-  expect(describeSlot(crewOf({}), 'beta')).toContain('beta: not set')
+  expect(describeSlot(crewOf({}), 'beta')).toContain('beta: no model by that name yet')
 })
 
 // ---- one record for every session --------------------------------------------------
 
 test('models.json is read back as the models set, whatever else the file holds', async () => {
   const { recordedModels } = await import('../hooks/crew.ts')
-  const text = JSON.stringify({ slots: { alpha: { model: 'deepseek/deepseek-v4.1-flash' }, beta: { model: '' }, gamma: { model: 'rm -rf /' } }, recent: ['deepseek/deepseek-v4.1-flash'] })
-  expect(recordedModels(text)).toEqual({ models: { alpha: 'deepseek/deepseek-v4.1-flash', beta: '' }, recent: ['deepseek/deepseek-v4.1-flash'] })
+  const text = JSON.stringify({ slots: { flash: { model: 'deepseek/deepseek-v4.1-flash', about: 'DeepSeek V4.1 Flash' }, old: { model: '' }, bad: { model: 'rm -rf /' }, 'NOT OK': { model: 'a/b' } }, recent: ['deepseek/deepseek-v4.1-flash'] })
+  expect(recordedModels(text)).toEqual({ models: { flash: 'deepseek/deepseek-v4.1-flash', old: '' }, recent: ['deepseek/deepseek-v4.1-flash'], about: { 'deepseek/deepseek-v4.1-flash': 'DeepSeek V4.1 Flash' } })
   expect(recordedModels(null)).toBeNull()
   expect(recordedModels('not json')).toBeNull()
   expect(recordedModels('{"other": 1}')).toBeNull()
   // What one session writes, the next reads back unchanged.
-  const written = routerTable(crewOf({}, { models: { beta: 'qwen/qwen3-coder' } }), ['qwen/qwen3-coder'])
-  expect(recordedModels(written)).toEqual({ models: { alpha: '', beta: 'qwen/qwen3-coder', gamma: '' }, recent: ['qwen/qwen3-coder'] })
+  const set = { models: { coder: 'qwen/qwen3-coder' }, recent: ['qwen/qwen3-coder'] }
+  expect(recordedModels(routerTable(crewOf({}, set), set))).toEqual({ models: { coder: 'qwen/qwen3-coder' }, recent: ['qwen/qwen3-coder'] })
 })
 
 test('a session starts with the models recorded in models.json, over its own store; the mode stays its own', async () => {
   initCrew({})
-  const file = routerTable(crewOf({}, { models: { alpha: 'qwen/qwen3-coder' } }), ['qwen/qwen3-coder'])
+  const recorded = { models: { alpha: 'qwen/qwen3-coder' }, recent: ['qwen/qwen3-coder'] }
+  const file = routerTable(crewOf({}, recorded), recorded)
   const io = { ...fakeIo([]), read: async () => file, storeGet: async () => ({ mode: 'budget', models: { alpha: 'old/model' } }) }
   await ensureCrew(io, null)
   const { crew } = await import('../hooks/crew-state.ts')
@@ -381,12 +385,138 @@ test('a session starts with the models recorded in models.json, over its own sto
 
 test('a model set in another session reaches this one at its next prompt', async () => {
   initCrew({})
-  let file = routerTable(crewOf({}), [])
+  let file = routerTable(crewOf({}), {})
   const io = { ...fakeIo([]), read: async () => file }
   await ensureCrew(io, null)
   const { crew } = await import('../hooks/crew-state.ts')
   expect(crew().slots).toEqual([])
-  file = routerTable(crewOf({}, { models: { beta: 'qwen/qwen3-coder' } }), ['qwen/qwen3-coder'])
+  const set = { models: { coder: 'qwen/qwen3-coder' }, recent: ['qwen/qwen3-coder'] }
+  file = routerTable(crewOf({}, set), set)
   await ensureCrew(io, null)
-  expect(crew().slots.map((slot) => [slot.name, slot.model])).toEqual([['beta', 'qwen/qwen3-coder']])
+  expect(crew().slots.map((slot) => [slot.name, slot.model])).toEqual([['coder', 'qwen/qwen3-coder']])
+})
+
+// ---- names you choose, removing, and /model ------------------------------------------
+
+test('a name is yours to choose, but never a word /jev already means', async () => {
+  const { validName, RESERVED_NAMES } = await import('../hooks/crew.ts')
+  for (const name of ['flash', 'coder', 'my-coder', 'q3', 'alpha']) expect(validName(name)).toBe(true)
+  for (const name of ['skills', 'status', 'mode', 'remove', 'off', 'all', 'tune', '3d', '-x', 'Flash', 'a b', 'x'.repeat(25)]) expect(validName(name)).toBe(false)
+  expect(RESERVED_NAMES.has('pet')).toBe(true)
+})
+
+test('remove deletes a model everywhere: from the crew, the junior, the record; a setting cannot bring it back', async () => {
+  const { juniorSlot } = await import('../hooks/crew.ts')
+  expect(parseCrewCommand('remove flash')).toEqual({ kind: 'model', slot: 'flash', model: '' })
+  expect(parseCrewCommand('delete flash')).toEqual({ kind: 'model', slot: 'flash', model: '' })
+  expect(parseCrewCommand('remove')?.kind).toBe('unknown')
+  let overrides = applyCrewCommand({ junior: 'flash' }, { kind: 'model', slot: 'flash', model: 'deepseek/deepseek-v4.1-flash' })
+  overrides = applyCrewCommand(overrides, { kind: 'model', slot: 'coder', model: 'qwen/qwen3-coder' })
+  expect(crewOf({ mode: 'junior-lead' }, overrides).junior).toBe('flash')
+  overrides = applyCrewCommand(overrides, { kind: 'model', slot: 'flash', model: '' })
+  const after = crewOf({ mode: 'junior-lead' }, overrides)
+  expect(after.slots.map((slot) => slot.name)).toEqual(['coder'])
+  // The junior moves to a model that's still there.
+  expect(juniorSlot(after, true)?.name).toBe('coder')
+  // A model from the old alphaModel setting, removed with /jev, stays removed.
+  expect(crewOf({ alphaModel: 'a/b' }, applyCrewCommand({}, { kind: 'model', slot: 'alpha', model: '' })).slots).toEqual([])
+  expect(crewOf({ alphaModel: 'a/b' }).slots.map((slot) => slot.name)).toEqual(['alpha'])
+})
+
+test('each custom model is a row in /model, as jev-<name>, handled like Sonnet by Claude Code', async () => {
+  const { pickerSettings } = await import('../hooks/crew.ts')
+  const crew = crewOf({}, {
+    models: { flash: 'deepseek/deepseek-v4.1-flash', gone: '' },
+    about: { 'deepseek/deepseek-v4.1-flash': 'DeepSeek: DeepSeek V4.1 Flash · 1M context · $0.14 in · $0.42 out per million tokens' },
+  })
+  expect(JSON.parse(pickerSettings(crew))).toEqual({
+    modelPicker: {
+      options: [
+        {
+          model: 'jev-flash',
+          label: 'flash · DeepSeek V4.1 Flash',
+          description: 'deepseek/deepseek-v4.1-flash on OpenRouter · $0.14 in · $0.42 out per million tokens · claude-jev only',
+          behavesAs: 'sonnet',
+        },
+      ],
+    },
+  })
+  expect(JSON.parse(pickerSettings(crewOf({})))).toEqual({ modelPicker: { options: [] } })
+})
+
+test('the router serves any name, hyphens included, and nothing removed', () => {
+  const table = { flash: { model: 'deepseek/deepseek-v4.1-flash' }, 'my-coder': { model: 'qwen/qwen3-coder' }, old: { model: '' } }
+  expect(slotOf('jev-my-coder', table)).toEqual({ name: 'my-coder', model: 'qwen/qwen3-coder' })
+  expect(slotOf('jev-flash', table)).toEqual({ name: 'flash', model: 'deepseek/deepseek-v4.1-flash' })
+  expect(slotOf('jev-old', table)).toBeNull()
+  expect(slotOf('jev-', table)).toBeNull()
+})
+
+// ---- what a custom model on OpenRouter is sent ---------------------------------------
+
+test('what is Anthropic\'s alone never reaches OpenRouter: account ids, safeguards, context management', async () => {
+  // @ts-expect-error: a plain .mjs module
+  const { forOpenRouter } = await import('../router/jev-router.mjs')
+  const body = {
+    model: 'jev-coder',
+    max_tokens: 100,
+    stream: true,
+    system: [{ type: 'text', text: 'sys' }],
+    metadata: { user_id: '{"device_id":"d","account_uuid":"a"}' },
+    safeguards: [{ type: 'dangerous_tool_use', classifier_context: { rules: 'private' } }],
+    context_management: { edits: [] },
+    messages: [{ role: 'user', content: 'hi' }],
+    tools: [{ name: 'Bash', description: 'b', input_schema: {} }],
+  }
+  const sent = forOpenRouter(body, 'qwen/qwen3-coder')
+  expect(sent.model).toBe('qwen/qwen3-coder')
+  for (const key of ['metadata', 'safeguards', 'context_management']) expect(key in sent).toBe(false)
+  expect(JSON.stringify(sent)).not.toContain('account_uuid')
+  expect(JSON.stringify(sent)).not.toContain('private')
+  // The request Claude Code built is left as it was (the fallback to Claude sends it whole).
+  expect(body.metadata).toBeDefined()
+})
+
+test('tool search becomes plain tools: deferred ones sent in full, announced ones added, references dropped', async () => {
+  // @ts-expect-error: a plain .mjs module
+  const { forOpenRouter } = await import('../router/jev-router.mjs')
+  const sent = forOpenRouter(
+    {
+      messages: [
+        { role: 'user', content: [{ type: 'tool_addition', tool: { name: 'mcp__docs__read', description: 'r', input_schema: {}, defer_loading: true } }] },
+        { role: 'assistant', content: [{ type: 'tool_use', id: 't1', name: 'ToolSearch', input: {} }] },
+        { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: [{ type: 'tool_reference', tool_name: 'mcp__docs__read' }, { type: 'text', text: 'found' }] }] },
+      ],
+      tools: [
+        { name: 'Bash', description: 'b', input_schema: {} },
+        { name: 'mcp__docs__guide', description: 'g', input_schema: {}, defer_loading: true },
+        { name: 'DeferredToolPlaceholder', description: 'p', input_schema: {}, defer_loading: true },
+        { type: 'web_search_20250305', name: 'web_search' },
+      ],
+    },
+    'm/x',
+  )
+  expect(sent.tools.map((tool: { name: string }) => tool.name)).toEqual(['Bash', 'mcp__docs__guide', 'mcp__docs__read'])
+  expect(JSON.stringify(sent)).not.toContain('defer_loading')
+  expect(JSON.stringify(sent)).not.toContain('tool_reference')
+  expect(JSON.stringify(sent)).not.toContain('tool_addition')
+  // The message that only announced a tool keeps its turn.
+  expect(sent.messages[0].content).toEqual([{ type: 'text', text: '(tools updated)' }])
+  expect(sent.messages[2].content[0].content).toEqual([{ type: 'text', text: 'found' }])
+})
+
+test('a custom model that fell back is reported once, and only what is new', async () => {
+  const { newFallbacks } = await import('../hooks/crew-run.ts')
+  const { setRouter } = await import('../hooks/crew-state.ts')
+  initCrew({})
+  setRouter('http://127.0.0.1:8799')
+  let fallbacks: Record<string, unknown> = {}
+  const io = {
+    fetch: async () => ({ ok: true, status: 200, text: JSON.stringify({ ok: true, fallbacks }) }),
+    sleep: () => new Promise<void>(() => undefined),
+  }
+  expect(await newFallbacks(io)).toEqual([]) // the first look only counts
+  fallbacks = { coder: { count: 1, to: 'claude-sonnet-5', why: 'OpenRouter 503: busy' } }
+  expect(await newFallbacks(io)).toEqual(['coder failed (OpenRouter 503: busy), so claude-sonnet-5 answered instead'])
+  expect(await newFallbacks(io)).toEqual([])
 })

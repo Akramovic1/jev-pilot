@@ -94,9 +94,22 @@ start_router() {
     # Through a custom address Claude Code would inline every tool's schema
     # (tens of thousands of tokens a request); deferred loading keeps it lean.
     export ANTHROPIC_BASE_URL="$url" JEV_ROUTER_URL="$url" ENABLE_TOOL_SEARCH="${ENABLE_TOOL_SEARCH:-true}"
+    # Your custom models in /model: rows jev-pilot writes (picker.json), only
+    # where the router is there to serve them.
+    if [[ -f "$HOME/.claude/jev-pilot/picker.json" ]]; then PICKER_SETTINGS="$HOME/.claude/jev-pilot/picker.json"; fi
   else
     echo "claude-jev: the custom-model router didn't start (see ~/.claude/jev-pilot/router.out); running without custom models" >&2
   fi
+}
+
+# The /model rows for your custom models, unless you pass --settings yourself
+# (Claude Code takes one).
+picker_args() {
+  PICKER=()
+  [[ -n "${PICKER_SETTINGS:-}" ]] || return 0
+  local arg
+  for arg in "$@"; do [[ "$arg" == --settings || "$arg" == --settings=* ]] && return 0; done
+  PICKER=(--settings "$PICKER_SETTINGS")
 }
 
 # `claude-jev router status|stop`: the custom-model router, by hand.
@@ -124,7 +137,8 @@ if marketplace_install; then
     exit 0
   fi
   start_router "$(clone_dir)"
-  exec claude "$@"
+  picker_args "$@"
+  exec claude ${PICKER[@]+"${PICKER[@]}"} "$@"
 fi
 
 plugin_dir="$(clone_dir)"
@@ -171,4 +185,5 @@ if [[ -z "${JEV_PILOT_NO_UPDATE_CHECK:-}" ]] && is_clone; then
 fi
 
 start_router "$plugin_dir"
-exec claude --plugin-dir "$plugin_dir" "$@"
+picker_args "$@"
+exec claude --plugin-dir "$plugin_dir" ${PICKER[@]+"${PICKER[@]}"} "$@"

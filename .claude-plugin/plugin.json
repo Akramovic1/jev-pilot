@@ -1,6 +1,6 @@
 {
   "name": "jev-pilot",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "TypeSafe's Jev decides how Claude Code works on each prompt: the main conversation's reasoning effort (low to xhigh, raised to max mid-turn when tool calls keep failing), each subagent's model, whether to split the work across subagents, and the one skill the prompt needs. Brings in custom OpenRouter models (a junior coder reviewed by Opus, or cheap bulk work) and Codex or OpenCode as reviewers, in modes you choose, each health-checked. Reads the prompt with recent context, records every decision, and suggests its own tuning. Backends: OpenRouter, TypeSafe's API, the Vercel AI Gateway, or Claude Code's built-in classifier. Built on claude-code-templates' jev-model-router and jev-skill-suggestion.",
   "author": {
     "name": "Ahmed Akram",
@@ -376,14 +376,9 @@
     },
     "junior": {
       "type": "string",
-      "title": "The junior's slot",
-      "description": "Which custom model the junior runs on in junior-lead mode",
-      "default": "alpha",
-      "options": [
-        "alpha",
-        "beta",
-        "gamma"
-      ]
+      "title": "The junior's model",
+      "description": "The name of the custom model the junior runs on in junior-lead mode (empty: the first one you added); /jev junior <name> changes it live",
+      "default": ""
     },
     "reviewer": {
       "type": "string",

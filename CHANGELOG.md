@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.8.0 — 2026-09-24
+
+**Your custom models, by name, in `/model`.**
+
+- **Names you choose.** `/jev <name> <model>` adds any OpenRouter model under a name of your own (`/jev flash deepseek/deepseek-v4.1-flash`, `/jev coder https://openrouter.ai/qwen/qwen3-coder`), up to 8, instead of the fixed alpha, beta and gamma. Claude Code sees each as `jev-<name>`. Names that `/jev` already uses (`status`, `mode`, `skills`…) are refused. Models set as alpha, beta or gamma before keep their names.
+- **Delete one.** `/jev remove <name>` (or `/jev <name> off`) removes it from every session, from `/model`, and as the junior (the junior moves to the next model you added).
+- **In `/model`.** Each model you add is a row in Claude Code's `/model` list, with its OpenRouter name and price, in `claude-jev` sessions (where the router serves it). Pick it to run the whole conversation on it. Press `s` to keep it to that session: Enter makes it your default for new sessions, plain `claude` sessions have no router, and `/model default` sets it back. New rows appear from the next `claude-jev` session. `claude-jev` passes them with `--settings` from a file jev-pilot writes, so your `settings.json` is never touched.
+- **A conversation on a custom model now works.** Claude Code's tool search sends tools in a form only Anthropic accepts ("Deferred custom tools are only supported on Anthropic"), so every request from a conversation running on a custom model was failing and quietly answered by Claude through the fallback. The router now sends every tool as a plain tool.
+- **Privacy fix: your account details stay with Anthropic.** Claude Code adds fields to its requests that are meant for Anthropic alone: your account and device ids, your permission rules and project notes, and context-management settings. The router had been passing them on to OpenRouter for custom-model requests since 0.5.0. It now removes them. A request that falls back to Claude still goes to Anthropic unchanged.
+- **A fallback is no longer silent.** When a custom model fails and Claude answers instead, the turn ends with a line saying which model and why, and the bubble says so. That's how the tool-search failure above was found.
+- **Safety net for a custom default.** Where jev-pilot runs without the router and the conversation's model is a custom one, it uses Sonnet for the session and says why.
+- Models added before 0.8 get their OpenRouter name and price filled in automatically.
+- jev-router is now version 4. `claude-jev` replaces the running one on its next start.
+
 ## 0.7.0 — 2026-09-24
 
 **You choose the custom models.**

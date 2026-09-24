@@ -4,7 +4,7 @@
  *
  * Claude Code talks to one server. This router is that server, on
  * 127.0.0.1: a request naming one of jev-pilot's custom model slots
- * (`jev-alpha`, `jev-beta`, `jev-gamma`, ...) goes to that slot's model on
+ * (`jev-<name>`, one per model you added with `/jev <name> <model>`) goes to that model on
  * OpenRouter, which speaks the same Anthropic Messages format; every other
  * request streams through to Anthropic unchanged, with its own headers, so
  * your Claude login and plan work exactly as before.
@@ -41,7 +41,7 @@ const DIR = join(homedir(), '.claude', 'jev-pilot')
 const MODELS = join(DIR, 'models.json')
 const LOG = join(DIR, 'router.log')
 /** Bumped with every change here: `claude-jev` replaces a running router of another version. */
-export const ROUTER_VERSION = '2'
+export const ROUTER_VERSION = '4'
 const SLOT_TIMEOUT_MS = Number(process.env.JEV_ROUTER_SLOT_TIMEOUT_MS ?? 60000)
 
 /** The slots, re-read whenever the file changes: { alpha: { model: 'deepseek/...' }, ... }. */
@@ -74,9 +74,9 @@ function openrouterKey() {
   return null
 }
 
-/** The slot a model name asks for, or null: `jev-alpha` → the alpha slot's OpenRouter model. */
+/** The custom model a model name asks for, or null: `jev-flash` → the OpenRouter model named flash. */
 export function slotOf(model, table) {
-  const match = /^jev-([a-z0-9]+)$/.exec(String(model ?? ''))
+  const match = /^jev-([a-z][a-z0-9-]*)$/.exec(String(model ?? ''))
   const slot = match && table[match[1]]
   return slot && slot.model ? { name: match[1], model: slot.model } : null
 }
@@ -108,6 +108,56 @@ export function learnModel(model, into = seen) {
 }
 export function fallbackModel(from = seen, env = process.env) {
   return env.JEV_ROUTER_FALLBACK_MODEL || from.sonnet || from.any || null
+}
+
+/**
+ * A request as a custom model on OpenRouter takes it. Claude Code writes
+ * requests for Anthropic, and a few parts are Anthropic's alone:
+ * - `metadata` (your account and device ids), `safeguards` (your permission
+ *   rules and project notes) and `context_management` are for Anthropic
+ *   only, and are never sent to another provider;
+ * - tool search: tools marked `defer_loading`, a placeholder tool, tools
+ *   announced mid-conversation (`tool_addition` blocks) and search results
+ *   (`tool_reference` blocks). OpenRouter refuses them ("Deferred custom
+ *   tools are only supported on Anthropic"), so every tool is sent as a plain
+ *   tool instead, the announced ones included, and the rest is left out.
+ */
+const ANTHROPIC_ONLY = new Set(['metadata', 'safeguards', 'context_management'])
+export function forOpenRouter(body, model) {
+  const tools = []
+  const named = new Set()
+  const addTool = (tool) => {
+    if (!tool || typeof tool.name !== 'string' || named.has(tool.name) || tool.name === 'DeferredToolPlaceholder') return
+    if (tool.type && tool.type !== 'custom') return
+    named.add(tool.name)
+    const { defer_loading: _deferred, ...plain } = tool
+    tools.push(plain)
+  }
+  for (const tool of Array.isArray(body.tools) ? body.tools : []) addTool(tool)
+  const messages = (Array.isArray(body.messages) ? body.messages : []).map((message) => {
+    if (!Array.isArray(message.content)) return message
+    const content = message.content.flatMap((block) => {
+      if (!block || typeof block !== 'object') return [block]
+      if (block.type === 'tool_addition') {
+        addTool(block.tool)
+        return []
+      }
+      if (block.type === 'tool_reference' || block.type === 'server_tool_use' || (/_tool_result$/.test(block.type ?? '') && block.type !== 'tool_result')) return []
+      if (block.type === 'tool_result' && Array.isArray(block.content)) {
+        return [{ ...block, content: block.content.filter((part) => part?.type !== 'tool_reference') }]
+      }
+      return [block]
+    })
+    // A message left with nothing (it only announced tools) keeps its turn.
+    return { ...message, content: content.length > 0 ? content : [{ type: 'text', text: '(tools updated)' }] }
+  })
+  const out = {}
+  for (const [key, value] of Object.entries(body)) if (!ANTHROPIC_ONLY.has(key)) out[key] = value
+  out.model = model
+  out.messages = messages
+  if (tools.length > 0) out.tools = tools
+  else delete out.tools
+  return out
 }
 
 /** Each slot's fallbacks since the router started, for `/jev status`. */
@@ -199,6 +249,12 @@ const server = createServer(async (req, res) => {
       let status = 502
       if (key) {
         log(`jev-${slot.name} → ${slot.model}`)
+        // Debugging only, never on by default: the last custom-model request, as sent.
+        if (process.env.JEV_ROUTER_DUMP) {
+          try {
+            writeFileSync(process.env.JEV_ROUTER_DUMP, JSON.stringify(forOpenRouter(parsed, slot.model)))
+          } catch {}
+        }
         const upstream = await withTimeout(SLOT_TIMEOUT_MS, (signal) =>
           fetch(OPENROUTER, {
             method: 'POST',
@@ -210,7 +266,7 @@ const server = createServer(async (req, res) => {
               'http-referer': 'https://github.com/Akramovic1/jev-pilot',
               'x-title': 'jev-pilot',
             },
-            body: JSON.stringify({ ...parsed, model: slot.model }),
+            body: JSON.stringify(forOpenRouter(parsed, slot.model)),
             signal,
           }),
         ).catch((error) => ({ failed: String(error) }))
