@@ -98,10 +98,10 @@ export const TIER_ORDER: readonly Tier[] = ['fast', 'balanced', 'deep']
  * shape of the work, not about model names: the model never sees an id.
  */
 const TIER_CRITERIA: Record<Tier, string> = {
-  fast: 'Mechanical and local: read or summarise a file, run one command, rename a symbol, answer something already in context.',
+  fast: 'Haiku. Choose when there is no logic to work out, only doing: search or list files, read and report what is there, copy, move or clone, fill in boilerplate from an existing pattern, add or fix comments and docs, rename, reformat, run a command and report the result.',
   balanced:
-    'Ordinary engineering: implement a well-specified change across a few files, write tests, fix a clearly described bug, review a small diff.',
-  deep: 'Hard or high-stakes: architecture and design, debugging a failure whose cause is unknown, security, data migrations, concurrency, anything touching production or money.',
+    'Sonnet. Choose when the logic is ordinary or already written down: carry out a detailed brief or plan step by step, implement a well-specified change across a few files, write tests for code that exists, fix a clearly described bug, review a small diff.',
+  deep: 'Opus. Choose when the work needs real judgment: design and architecture, a bug whose cause is unknown, security, data migrations, concurrency, anything touching production or money, or a problem whose approach is not written down.',
 }
 
 /**
@@ -202,6 +202,17 @@ export function isFollowUp(prompt: string): boolean {
   return text.split(/\s+/).length <= 8
 }
 
+/**
+ * The effort question's options, one per rung of EFFORT_ORDER, each saying
+ * when to choose it (the rubric's levels). Asked as a choice, not a score:
+ * measured on 76 labelled real requests, named options halved the answers
+ * off by two or more levels (9 to 5) and got more medium tasks right (7 to
+ * 10 of 26), with its misses balanced instead of mostly too high.
+ */
+export const EFFORT_CHOICES: Record<Effort, string> = Object.fromEntries(
+  EFFORT_ORDER.map((level, index) => [level, EFFORT_RUBRIC[index] as string]),
+) as Record<Effort, string>
+
 export function questions(provider: Provider, withStrategy = false, subagent = false): Record<string, unknown> {
   const asked: Record<string, unknown> = {
     tier: {
@@ -210,9 +221,9 @@ export function questions(provider: Provider, withStrategy = false, subagent = f
       criteria: TIER_CRITERIA,
     },
     effort: {
-      type: 'score',
+      type: 'choice',
       instructions: subagent ? SUBAGENT_EFFORT_INSTRUCTIONS : EFFORT_INSTRUCTIONS,
-      criteria: EFFORT_RUBRIC,
+      criteria: EFFORT_CHOICES,
     },
     risky: {
       // The same question under two names: `noul` on TypeSafe's own API and
@@ -326,16 +337,27 @@ export function readDecision(responseText: string): Decision | null {
   const strategyAnswer = answers.strategy
   const strategy = isStrategy(strategyAnswer?.choice) ? strategyAnswer.choice : null
 
-  const effortProbabilities = effortAnswer?.probabilities
+  // Effort comes as a choice (a level name, probabilities by name) or, from
+  // an older question, a score (0..4, probabilities keyed "0".."4"). Both
+  // read the same: probabilities by rung, and their mean as the score.
+  const rawProbabilities = effortAnswer?.probabilities
+  const byName = rawProbabilities && typeof rawProbabilities === 'object' && !Array.isArray(rawProbabilities) ? (rawProbabilities as Record<string, unknown>) : null
+  let effortProbabilities: Record<string, number> | null = null
+  let effort: number | null = typeof effortAnswer?.score === 'number' ? effortAnswer.score : null
+  if (byName && EFFORT_ORDER.some((level) => typeof byName[level] === 'number')) {
+    effortProbabilities = Object.fromEntries(EFFORT_ORDER.map((level, index) => [String(index), typeof byName[level] === 'number' ? (byName[level] as number) : 0]))
+    effort = EFFORT_ORDER.reduce((sum, _level, index) => sum + index * (effortProbabilities as Record<string, number>)[String(index)]!, 0)
+  } else if (typeof effortAnswer?.choice === 'string' && (EFFORT_ORDER as readonly string[]).includes(effortAnswer.choice)) {
+    effort = EFFORT_ORDER.indexOf(effortAnswer.choice as Effort)
+  } else if (byName) {
+    effortProbabilities = byName as Record<string, number>
+  }
   return {
     tier: tierAnswer.choice,
     confidence: confidenceOf(tierAnswer),
-    effort: typeof effortAnswer?.score === 'number' ? effortAnswer.score : null,
+    effort,
     effortConfidence: effortAnswer ? confidenceOf(effortAnswer) : null,
-    effortProbabilities:
-      effortProbabilities && typeof effortProbabilities === 'object' && !Array.isArray(effortProbabilities)
-        ? (effortProbabilities as Record<string, number>)
-        : null,
+    effortProbabilities,
     risky,
     strategy,
     strategyConfidence: strategy && strategyAnswer ? confidenceOf(strategyAnswer) : null,

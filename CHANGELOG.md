@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.13 — 2026-09-24
+
+- **Effort is a choice, not a score.** Jev now picks one of five named levels (low, medium, high, xhigh, max), each described by when to choose it, instead of rating difficulty on a 0-4 scale. On the 76 labelled real requests, answers off by two or more levels went from 8-9 to 5 across two runs, medium tasks answered right from 7 to 10 of 26, and the misses are balanced instead of mostly too high. Every question to Jev is now a choice.
+- **Each model says when to choose it.** Haiku when there's no logic to work out (search, read and report, copy or clone, boilerplate, comments, renames, formatting, running a command); Sonnet when the logic is ordinary or already written down (carrying out a plan, a well-specified change, tests, a described bug); Opus when the work needs real judgment. On 20 real subagent briefs, Haiku went only to a pure code search, Sonnet took the builders and fixers, and Opus kept the judgment work.
+
 ## 0.4.12 — 2026-09-24
 
 Better effort predictions, measured on 76 real, hand-labelled requests and subagent briefs from two weeks of use. Answers off by two or more levels (wasted tokens, or a task starved of thinking) went from 19 to 9; exact answers from 43% to 50%.

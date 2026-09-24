@@ -137,7 +137,7 @@ flowchart LR
     L --> Rep["/jev-pilot:report"]
 ```
 
-**Effort.** Jev rates each request on a five-level rubric. Each level describes a kind of task, not an amount:
+**Effort.** Jev picks one of five levels, each described by the kind of task it's for, not an amount. Every question to Jev is a choice like this, each option saying when to choose it:
 
 | Level | Kind of task |
 |---|---|
@@ -158,7 +158,7 @@ flowchart LR
 - The last 4 messages, capped at 2000 characters: text and tool names only, never tool input or output. So "yes, do it" is judged as the work it agrees to.
 - Plain facts about the request: its length, how many files it names, whether it contains code or an error, whether it's a question, and what recent turns did with their tools.
 
-**Subagents.** Each one gets the cheapest tier that can do its brief well: `haiku`, `sonnet` or `opus`. These are family names, so Claude Code uses its current release of each. No versions are hardcoded. It also gets an effort from the same decision, on the same rubric and bars as the main conversation, but Jev is asked how hard the brief is to *carry out*: a brief that already names the files, steps and tests has done the design, so builders and fixers usually get `high`, and `xhigh` is kept for briefs that ask for design or an unknown cause. The Agent tool has no effort setting, so jev-pilot sets it on each request the subagent makes.
+**Subagents.** Each one gets the cheapest model that can do its brief well: **Haiku** when there's no logic to work out (search, read and report, copy or clone, boilerplate, comments, renames, formatting, running a command), **Sonnet** when the logic is ordinary or already written down (carrying out a plan, a well-specified change, tests, a described bug), **Opus** when the work needs real judgment (design, unknown causes, security, migrations, production or money). Moving down a model needs Jev at least 60% sure. These are family names, so Claude Code uses its current release of each. No versions are hardcoded. It also gets an effort from the same decision, on the same rubric and bars as the main conversation, but Jev is asked how hard the brief is to *carry out*: a brief that already names the files, steps and tests has done the design, so builders and fixers usually get `high`, and `xhigh` is kept for briefs that ask for design or an unknown cause. The Agent tool has no effort setting, so jev-pilot sets it on each request the subagent makes.
 
 **Claude knows it's there.** On the first prompt of each session (and after a compaction), Claude gets a short note listing what jev-pilot decides, so it leaves those decisions alone: it won't pin a subagent's model or effort, or make agent types just to fix one, unless you ask.
 

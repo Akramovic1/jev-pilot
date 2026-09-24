@@ -110,8 +110,10 @@ const decided = (patch: Partial<Decision>): Decision => ({
 test('the rubric reaches max, and every rung is reachable from its own score', () => {
   expect(EFFORT_ORDER).toEqual(['low', 'medium', 'high', 'xhigh', 'max'])
   EFFORT_ORDER.forEach((level, score) => expect(effortLevel(score)).toBe(level))
-  const rubric = (questions('typesafe').effort as { criteria: string[] }).criteria
-  expect(rubric.length).toBe(EFFORT_ORDER.length)
+  // Effort is asked as a choice: one named option per rung, low to max.
+  const options = (questions('typesafe').effort as { type: string; criteria: Record<string, string> })
+  expect(options.type).toBe('choice')
+  expect(Object.keys(options.criteria)).toEqual([...EFFORT_ORDER])
 })
 
 test('the ceiling caps what the router asks for', () => {
@@ -288,10 +290,32 @@ test('the route acts on the leaned level', () => {
 
 // --- the questions themselves ------------------------------------------------------
 
-test('every effort level describes a kind of task, one per rung', () => {
-  const rubric = (questions('openrouter').effort as { criteria: string[] }).criteria
-  expect(rubric.length).toBe(EFFORT_ORDER.length)
-  for (const level of rubric) expect(level.length).toBeGreaterThan(40)
+test('every effort option says when to choose it, one per rung', () => {
+  const options = (questions('openrouter').effort as { criteria: Record<string, string> }).criteria
+  expect(Object.keys(options)).toEqual([...EFFORT_ORDER])
+  for (const when of Object.values(options)) expect(when.length).toBeGreaterThan(40)
+})
+
+test('every model option names its model and says when to choose it; Sonnet has its own place', () => {
+  const tiers = (questions('openrouter').tier as { type: string; criteria: Record<string, string> }).criteria
+  expect(tiers.fast).toMatch(/^Haiku\. Choose when there is no logic/)
+  expect(tiers.balanced).toMatch(/^Sonnet\. Choose when the logic is ordinary or already written down/)
+  expect(tiers.deep).toMatch(/^Opus\. Choose when the work needs real judgment/)
+})
+
+test('an effort answer given as a choice reads as probabilities by rung, with their mean as the score', () => {
+  const text = JSON.stringify({
+    answers: {
+      tier: { type: 'choice', choice: 'balanced', probabilities: { fast: 0.1, balanced: 0.8, deep: 0.1 }, confidence: 0.8 },
+      effort: { type: 'choice', choice: 'high', probabilities: { low: 0, medium: 0.2, high: 0.7, xhigh: 0.1, max: 0 }, confidence: 0.7 },
+      risky: { type: 'noul', noul: 0.05 },
+    },
+  })
+  const decision = readDecision(text)
+  expect(decision?.effortProbabilities).toEqual({ '0': 0, '1': 0.2, '2': 0.7, '3': 0.1, '4': 0 })
+  expect(decision?.effort).toBeCloseTo(1.9)
+  expect(decision?.effortConfidence).toBe(0.7)
+  expect(effortScoreOf(decision as Decision, 0.15)).toBe(2)
 })
 
 test('the risk question says what true and false look like, where the schema takes it', () => {
