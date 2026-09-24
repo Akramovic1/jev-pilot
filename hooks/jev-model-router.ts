@@ -61,10 +61,13 @@ import { clearSkillNotes, resetBriefing, takeBriefing, takeSkill, turnLine } fro
 import { moodOf, say, setBoost, subagentLabel, turnSpeech } from './pet-art.ts'
 import { feature } from './features.ts'
 import { crewNote, JUNIOR_AGENT, juniorSlot, REVIEWERS, reviewerAgent, slotAlias, slotsOffered } from './crew.ts'
-import { crew, reviewerHealthy, router, slotHealthy } from './crew-state.ts'
+import { crew, reviewerHealthy, router, slotUsable } from './crew-state.ts'
 import { ensureCrew, startSession, type CrewIo } from './crew-run.ts'
+import { isContinuation, offerPart, stillOffered, type RouterPart } from './jev-call.ts'
+import { recordSubagent, recordSubagentUsage, recordTurn, resetStats, shortStats } from './session-stats.ts'
 import type { ContextMessage } from './context.ts'
 import { appendEntry, configKeysOf, entriesOf, LEDGER_KEY, reportPrompt, suggestions, summarize } from './ledger.ts'
+import { dueToPropose, effective, initTuning, setTuning, TUNING_KEY, tuningLoaded, tuningOf } from './tuning.ts'
 import type { LedgerEntry, TunableConfig } from './ledger.ts'
 import {
   adviseStrategy,
@@ -125,6 +128,38 @@ interface Io {
  * the engine built it. A timeout or a busy backend is routine (the pet says
  * so); only an error is logged whatever the log level.
  */
+async function askJev(
+  io: Io,
+  backend: Backend,
+  state: Record<string, unknown>,
+  withStrategy: boolean,
+  what: string,
+  subagent = false,
+  slots: readonly SlotChoice[] = [],
+  junior = false,
+  extra: Record<string, unknown> = {},
+): Promise<{ text: string | null; miss: Miss | null }> {
+  try {
+    const response = await Promise.race([
+      io.fetch(backend.url, {
+        method: 'POST',
+        headers: requestHeaders(backend.provider, backend.apiKey, backend.modelId),
+        body: requestBody(backend.provider, state, backend.modelId, withStrategy, subagent, slots, junior, extra),
+      }),
+      io.sleep(backend.timeoutMs),
+    ])
+    if (response && response.ok) return { text: response.text, miss: null }
+    const miss = missOf(response ? response.status : null)
+    const tell = miss === 'error' ? io.log : io.detail
+    if (response) await tell(`[jev-model-router] ${backend.provider} responded ${response.status}: ${response.text.slice(0, 200)}`)
+    else await tell(`[jev-model-router] classification passed ${backend.timeoutMs}ms; leaving ${what} alone`)
+    return { text: null, miss }
+  } catch (error) {
+    await io.log(`[jev-model-router] classification failed: ${String(error)}`)
+    return { text: null, miss: 'error' }
+  }
+}
+
 async function classify(
   io: Io,
   backend: Backend | null,
@@ -136,28 +171,10 @@ async function classify(
   junior = false,
 ): Promise<{ decision: Decision | null; miss: Miss | null }> {
   if (!backend) return { decision: null, miss: null }
-  try {
-    const response = await Promise.race([
-      io.fetch(backend.url, {
-        method: 'POST',
-        headers: requestHeaders(backend.provider, backend.apiKey, backend.modelId),
-        body: requestBody(backend.provider, state, backend.modelId, withStrategy, subagent, slots, junior),
-      }),
-      io.sleep(backend.timeoutMs),
-    ])
-    if (response && response.ok) {
-      const decision = readDecision(response.text, slots.map((slot) => slot.name))
-      return { decision, miss: decision ? null : 'error' }
-    }
-    const miss = missOf(response ? response.status : null)
-    const tell = miss === 'error' ? io.log : io.detail
-    if (response) await tell(`[jev-model-router] ${backend.provider} responded ${response.status}: ${response.text.slice(0, 200)}`)
-    else await tell(`[jev-model-router] classification passed ${backend.timeoutMs}ms; leaving ${what} alone`)
-    return { decision: null, miss }
-  } catch (error) {
-    await io.log(`[jev-model-router] classification failed: ${String(error)}`)
-    return { decision: null, miss: 'error' }
-  }
+  const { text, miss } = await askJev(io, backend, state, withStrategy, what, subagent, slots, junior)
+  if (text === null) return { decision: null, miss }
+  const decision = readDecision(text, slots.map((slot) => slot.name))
+  return { decision, miss: decision ? null : 'error' }
 }
 
 /** The conversation so far, or none when not `wanted` or unreadable. */
@@ -204,7 +221,7 @@ export const register: Register = (on, options) => {
   // built-in classifier, which is silent; say so once, when a hook first runs.
   let unusableReported = forced === 'auto' || forced === 'builtin' || active !== null
 
-  const timeoutMs = number('timeoutMs', 800)
+  const timeoutMs = number('timeoutMs', 1500)
   // Each part reads its switch live (features.ts): /jev turns it on or off.
   const routeSubagentModel = () => feature('subagents')
   const routeMainEffort = () => feature('effort')
@@ -251,14 +268,9 @@ export const register: Register = (on, options) => {
     // A near tie between two effort levels takes the higher one.
     closeMargin: Math.max(0, number('effortCloseMargin', 0.15)),
   }
-  const margin = policy.closeMargin ?? 0
+  let margin = policy.closeMargin ?? 0
   // Each turn's decision and outcome, kept for /jev-pilot:report.
   const recordDecisions = flag('recordDecisions', true)
-  const tunable: TunableConfig = {
-    timeoutMs,
-    minDowngradeConfidence: policy.minDowngradeConfidence,
-    effortCloseMargin: margin,
-  }
 
   // How much of the conversation the decision model reads beside a prompt.
   const contextLimits = {
@@ -293,6 +305,23 @@ export const register: Register = (on, options) => {
   })
 
   const backend: Backend | null = active ? { provider: active, url, apiKey, modelId, timeoutMs } : null
+  // What the ledger may tune (`/jev tune`): the settings' values, and how a
+  // learned change goes into force, here, at once.
+  initTuning(
+    {
+      timeoutMs,
+      minDowngradeConfidence: policy.minDowngradeConfidence,
+      effortCloseMargin: margin,
+      minHighConfidence: policy.minHighConfidence ?? 0.5,
+    },
+    (tuned: TunableConfig) => {
+      policy.minDowngradeConfidence = tuned.minDowngradeConfidence
+      policy.minHighConfidence = tuned.minHighConfidence
+      policy.closeMargin = tuned.effortCloseMargin
+      margin = tuned.effortCloseMargin
+      if (backend) backend.timeoutMs = tuned.timeoutMs
+    },
+  )
 
   // The classification waiting for the turn that reads its prompt, and what
   // the current turn settled on. Both are single slots: main-loop turns run
@@ -319,6 +348,8 @@ export const register: Register = (on, options) => {
   // The main loop's tool calls that failed in a row since its last success,
   // counted as they finish (tool.call) and cleared when a turn starts.
   let failedInARow = 0
+  // The last decision Jev made for a typed prompt: "continue" goes on with it.
+  let lastDecision: Decision | null = null
   // Each family's current full id, learned from the requests the engine makes.
   const ids = modelIds()
   // The ledger: the turn in progress (its draft waits in `pending`).
@@ -383,6 +414,8 @@ export const register: Register = (on, options) => {
       },
     }
     await ensureCrew(crewIo, openrouterKey || null)
+    // The tuning learned from the ledger, once per worker (a reload starts over).
+    if (!tuningLoaded()) setTuning(tuningOf(await $.store.get(TUNING_KEY).catch(() => undefined)))
     // Only the person's own tasks are classified. A notification, a peer's
     // message or a typed `/command` would otherwise take the pending slot and
     // leave the next real prompt's turn without its decision.
@@ -410,79 +443,104 @@ export const register: Register = (on, options) => {
     const startedAt = await $.clock.now()
     const messages = await readMessages(io, contextLimits.messages > 0)
     const recent = recentContext(messages, e.text, contextLimits)
-    let decision: Decision | null = null
-    let miss: Miss | null = null
-    if (active) {
-      ;({ decision, miss } = await classify(
-        io,
-        backend,
-        { prompt: e.text, recent_context: recent, signals: signalsOf(e.text, messages) },
-        planning,
-        'the turn',
-        false,
-        [],
-        // Junior-lead mode, with a junior answering its check: the junior is an option.
-        (() => {
-          const slot = juniorSlot(crew(), router() !== null)
-          return !!slot && slotHealthy(slot)
-        })(),
-      ))
-    } else {
-      // No backend: the engine's own small-model classifier answers the same
-      // question, without the confidence the policy's threshold reads, and
-      // without a strategy (it answers one label).
-      try {
-        const input = recent ? `Recent conversation:\n${recent}\n\nLatest request:\n${e.text}` : e.text
-        const label = await $.model.classify(input, TIER_ORDER)
-        if (label) {
-          decision = {
-            tier: label as Tier,
-            confidence: null,
-            risky: null,
-            effort: null,
-            effortConfidence: null,
-          }
-        }
-      } catch (error) {
-        $.ui.log(`[jev-model-router] built-in classifier failed: ${String(error)}`)
+    // What the answer settles, however it arrives: the strategy advice, the
+    // ledger's draft, and the decision waiting for the turn.
+    const finish = async (decision: Decision | null, miss: Miss | null, ms: number, reused = false): Promise<string | null> => {
+      if (decision && !reused) lastDecision = decision
+      // What the decision model actually answered, whatever the policy then
+      // does with it. This is the line that proves the classification ran.
+      if (verbose) {
+        const read = recent ? ` · read ${recent.split('\n').length} recent messages` : ''
+        $.ui.log(`[jev-model-router] jev: ${reused ? 'continuing, the last decision kept' : describeDecision(decision, ms, margin)}${read}`)
       }
+      let block: string | null = null
+      if (planning && !reused) {
+        const advice = adviseStrategy(decision, strategyConfig)
+        block = advice.block
+        if (verbose) $.ui.log(`[jev-model-router] strategy: ${block ? 'advising ' : ''}${advice.reason}`)
+      }
+      const draft: Draft = {
+        answered: decision !== null,
+        ms: active && !reused ? Math.round(ms) : null,
+        tier: decision?.tier ?? null,
+        tierConfidence: decision?.confidence ?? null,
+        effortLevel: decision ? effortScoreOf(decision, margin) : null,
+        effortConfidence: decision?.effortConfidence ?? null,
+        strategy: reused ? null : (decision?.strategy ?? null),
+        strategyConfidence: reused ? null : (decision?.strategyConfidence ?? null),
+        advised: block !== null,
+      }
+      pending.put({ decision, prompt: e.text, draft, miss })
+      return block
+    }
+    const refused = (result: Awaited<ReturnType<typeof next>>) => {
+      // Refused further down: no turn will read this decision.
+      if (result.drop) {
+        pending.withdraw()
+        if (note) resetBriefing()
+      }
+      return result
     }
 
-    // What the decision model actually answered, whatever the policy then
-    // does with it. This is the line that proves the classification ran.
-    const ms = (await $.clock.now()) - startedAt
-    if (verbose) {
-      const read = recent ? ` · read ${recent.split('\n').length} recent messages` : ''
-      $.ui.log(`[jev-model-router] jev: ${describeDecision(decision, ms, margin)}${read}`)
+    // "continue": the work in progress goes on as the last turn decided.
+    if (active && lastDecision && isContinuation(e.text)) {
+      await finish(lastDecision, null, 0, true)
+      return refused(await next(withNote(e)))
     }
 
-    let block: string | null = null
-    if (planning) {
-      const advice = adviseStrategy(decision, strategyConfig)
-      block = advice.block
-      if (verbose) $.ui.log(`[jev-model-router] strategy: ${block ? 'advising ' : ''}${advice.reason}`)
+    if (active && backend) {
+      // One request for the prompt: the skill module, further down, adds its
+      // questions to these and sends them together (jev-call.ts).
+      const junior = (() => {
+        const slot = juniorSlot(crew(), router() !== null)
+        return !!slot && slotUsable(slot)
+      })()
+      const state = { prompt: e.text, recent_context: recent, signals: signalsOf(e.text, messages) }
+      let settled = false
+      const part: RouterPart = {
+        prompt: e.text,
+        ask: async (extra) => {
+          const asked = await askJev(io, backend, state, planning, 'the turn', false, [], junior, extra)
+          return { ...asked, ms: (await $.clock.now()) - startedAt }
+        },
+        settle: async (answer) => {
+          settled = true
+          const decision = answer.text === null ? null : readDecision(answer.text)
+          return finish(decision, answer.text !== null && !decision ? 'error' : answer.miss, answer.ms)
+        },
+      }
+      offerPart(part)
+      const result = await next(withNote(e))
+      // Nobody took it (the skill module never ran): asked now, before the
+      // turn starts; too late for advice, in time for the effort.
+      stillOffered(part)
+      if (!settled) await part.settle(await part.ask({}))
+      return refused(result)
     }
-    const draft: Draft = {
-      answered: decision !== null,
-      ms: active ? Math.round(ms) : null,
-      tier: decision?.tier ?? null,
-      tierConfidence: decision?.confidence ?? null,
-      effortLevel: decision ? effortScoreOf(decision, margin) : null,
-      effortConfidence: decision?.effortConfidence ?? null,
-      strategy: decision?.strategy ?? null,
-      strategyConfidence: decision?.strategyConfidence ?? null,
-      advised: block !== null,
+
+    // No backend: the engine's own small-model classifier answers the same
+    // question, without the confidence the policy's threshold reads, and
+    // without a strategy (it answers one label).
+    let decision: Decision | null = null
+    try {
+      const input = recent ? `Recent conversation:\n${recent}\n\nLatest request:\n${e.text}` : e.text
+      const label = await $.model.classify(input, TIER_ORDER)
+      if (label) {
+        decision = {
+          tier: label as Tier,
+          confidence: null,
+          risky: null,
+          effort: null,
+          effortConfidence: null,
+        }
+      }
+    } catch (error) {
+      $.ui.log(`[jev-model-router] built-in classifier failed: ${String(error)}`)
     }
-    pending.put({ decision, prompt: e.text, draft, miss })
+    const block = await finish(decision, null, (await $.clock.now()) - startedAt)
     // Attached on the way down: one block after the prompt as typed, read by
     // the model and never shown to the person.
-    const result = await next(withNote(e, block))
-    // Refused further down: no turn will read this decision.
-    if (result.drop) {
-      pending.withdraw()
-      if (note) resetBriefing()
-    }
-    return result
+    return refused(await next(withNote(e, block)))
   })
 
   on('turn.step', async function* ($, e, next) {
@@ -719,10 +777,17 @@ export const register: Register = (on, options) => {
     if (e.agentId) {
       subagents.delete(e.agentId)
       subagentEffort.delete(e.agentId)
+      recordSubagentUsage(e.agentId, e.usage as Record<string, unknown> | null | undefined)
     }
     if (!e.agentId && current && current.turnId === e.turnId) {
       const { turnId: _turnId, ...entry } = current
       current = null
+      // Every tenth turn, the bubble says what the session came to.
+      const turns = recordTurn(entry.startedFrom, entry.started)
+      if (turns % 10 === 0 && petOn()) {
+        say(shortStats(), 'calm')
+        $.ui.invalidate('ui.render')
+      }
       const finished: LedgerEntry = {
         ...entry,
         outcome: e.reason,
@@ -730,7 +795,18 @@ export const register: Register = (on, options) => {
         outputTokens: e.usage?.output_tokens ?? null,
       }
       try {
-        await $.store.set(LEDGER_KEY, appendEntry(await $.store.get(LEDGER_KEY), finished))
+        const entries = appendEntry(await $.store.get(LEDGER_KEY), finished)
+        await $.store.set(LEDGER_KEY, entries)
+        // Every 20 turns: what the ledger now suggests, in one line.
+        const found = dueToPropose(entries)
+        if (found.length > 0) {
+          const first = found[0] as (typeof found)[number]
+          if (lines) $.ui.log(`jev · learned from your last turns: ${first.why}. /jev tune shows the change, /jev tune apply takes it`)
+          if (petOn()) {
+            say(`tune? ${first.option} ${first.from}→${first.to} · /jev tune`, 'ready')
+            $.ui.invalidate('ui.render')
+          }
+        }
       } catch (error) {
         $.ui.log(`[jev-model-router] could not record the turn: ${String(error)}`)
       }
@@ -745,6 +821,8 @@ export const register: Register = (on, options) => {
   on('session.end', { sessionId: /(?:)/ }, async ($, e, next) => {
     pending.clear()
     resetBriefing()
+    resetStats()
+    lastDecision = null
     subagents.clear()
     subagentEffort.clear()
     clearSkillNotes()
@@ -777,7 +855,7 @@ export const register: Register = (on, options) => {
       } catch {
         keys = []
       }
-      const text = reportPrompt(summarize(entries, tunable), settingsPath, suggestions(entries, tunable).length > 0, keys)
+      const text = reportPrompt(summarize(entries, effective()), settingsPath, suggestions(entries, effective()).length > 0, keys)
       return next({ ...e, text })
     } catch (error) {
       return next({ ...e, text: `Tell the user the jev-pilot ledger could not be read: ${String(error)}. Change nothing.` })
@@ -827,19 +905,23 @@ export const register: Register = (on, options) => {
         say(`${subagentLabel(e.description, 'review')} → ${e.subagentType.replace(/^jev-pilot:|-review$/g, '')}`, 'focused')
         $.ui.invalidate('ui.render')
       }
-      return next({ ...e, model: policy.tiers.fast })
+      const reviewed = await next({ ...e, model: policy.tiers.fast })
+      recordSubagent(reviewed.agentId, policy.tiers.fast, e.parentModel ?? e.model)
+      return reviewed
     }
 
     // The junior runs on its slot; with the slot down, on Sonnet instead.
     if (e.subagentType === JUNIOR_AGENT) {
       const slot = juniorSlot(crew(), router() !== null)
-      const model = slot && slotHealthy(slot) ? slotAlias(slot.name) : policy.tiers.balanced
+      const model = slot && slotUsable(slot) ? slotAlias(slot.name) : policy.tiers.balanced
       if (petOn()) {
         say(`${subagentLabel(e.description, 'junior')} → junior on ${model}`, 'focused')
         $.ui.invalidate('ui.render')
       }
       if (lines) $.ui.log(`jev · junior on ${model}`)
-      return next({ ...e, model })
+      const spawned = await next({ ...e, model })
+      recordSubagent(spawned.agentId, model, e.parentModel ?? e.model)
+      return spawned
     }
 
     // Quality mode: Opus for every subagent, no cheaper models.
@@ -850,7 +932,7 @@ export const register: Register = (on, options) => {
 
     // The custom models Jev may choose here: this mode's, the router up, each
     // one answering its last check.
-    const offered = slotsOffered(crew(), router() !== null).filter(slotHealthy)
+    const offered = slotsOffered(crew(), router() !== null).filter(slotUsable)
     const startedAt = await $.clock.now()
     let decision: Decision | null = null
     if (active) {
@@ -916,6 +998,7 @@ export const register: Register = (on, options) => {
       }
     }
     const result = await next(model ? { ...e, model } : e)
+    recordSubagent(result.agentId, model ?? current ?? null, e.parentModel ?? current)
     if (decision && result.agentId && routeSubagentEffort()) {
       subagents.set(result.agentId, { decision, label, model: model ?? null })
       while (subagents.size > MAX_SUBAGENTS) subagents.delete(subagents.keys().next().value as string)

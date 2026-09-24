@@ -154,7 +154,7 @@ const entry = (patch: Partial<LedgerEntry>): LedgerEntry => ({
   startedFrom: 'medium', started: 'low', raisedTo: null, toolCalls: 1, failures: 0, strategy: null,
   strategyConfidence: null, advised: false, outcome: 'answer', durationMs: 1, outputTokens: 1, ...patch,
 })
-const tunable = { timeoutMs: 800, minDowngradeConfidence: 0.6, effortCloseMargin: 0.15 }
+const tunable = { timeoutMs: 800, minDowngradeConfidence: 0.6, effortCloseMargin: 0.15, minHighConfidence: 0.5 }
 
 test('keyless turns (no backend asked) never suggest a longer timeout', () => {
   const keyless = Array.from({ length: 30 }, () => entry({ answered: false, ms: null }))

@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.6.0 — 2026-09-24
+
+**One request per prompt, a router that can't break your work, and tuning learned from your own turns.**
+
+- **One Jev request per prompt instead of three.** The effort, model, strategy and skill questions go together in one request, about 0.5 s, down from about 1.5 s for three in a row. One request with both sets of questions takes as long as the slower one alone, and gave the same effort, model and strategy on every prompt tried.
+- **Better skill picks without the second request.** Jev now reads each skill's description and the opening of its `SKILL.md` beside a "none of these fits" option, and is asked to match the kind of work rather than a product the prompt names. On 16 test prompts it picked the same skill as the old three-request pipeline 14 times, and the other two were better: no skill for a rename (was `codex-delegate`), and a failing test goes to `systematic-debugging` instead of a skill named after the library it mentions. The old second request is still there as the `rerank` option, now off by default.
+- **"continue" asks nothing.** A plain "continue" or "keep going" goes on as the last turn decided, with no request. Approvals ("yes", "go ahead") are still asked, since they often start the work the last turn only proposed.
+- **`timeoutMs` is 1500 by default** (the installer already set it): one request now, instead of three each capped at 800.
+- **A custom model that fails falls back to Claude.** If OpenRouter is down, busy or slow (60 s to start answering), or the model is gone, jev-router sends the same request to Anthropic as Sonnet, using the id it learned from your own traffic and kept on disk. `/jev status` shows each fallback and why. With nothing to fall back to, a permanent error such as a bad model id is passed on as-is, so Claude Code doesn't retry it nine times.
+- **The router stays up.** It runs detached from the terminal that started it, since closing that terminal used to stop the router for every other `claude-jev` session. A supervisor restarts it after a crash, and `claude-jev` replaces a router left from an older version. New: `claude-jev router status` and `claude-jev router stop`. Uninstalling stops it.
+- **An unchecked custom model can be used.** A headless run's first prompt comes before the model's health check; since the router now falls back, the junior and budget slots are offered unless their check failed.
+- **It learns from your turns: `/jev tune`.** Every 20 turns jev-pilot reads the decision ledger, and when it points one way it proposes a change in one line (the bubble says `tune? minHighConfidence 0.5→0.6 · /jev tune`). `/jev tune apply` takes it on top of your settings, and `/jev tune reset` goes back. Each change waits for 20 new turns of evidence. New: turns started at `high` that keep finishing in two tool calls raise `minHighConfidence`.
+- **What the session came to.** `/jev` ends with a tally: turns started below or above your effort, subagents on a cheaper model than the conversation's, and the tokens they used. The bubble shows it every tenth turn. These are counts, not dollars.
+- **jev-bench: 8 tasks and a junior-lead setup.** Four new tasks (a parser from its tests, four rule bugs in discount codes, a new argument, input validation with hidden tests). With 0.6.0: jev-pilot passed 8/8 for $1.92 against $2.20 without it (−13%), cheaper on 7 of 8 tasks and dearer only on the flaky-test bug, where Jev chose xhigh. The junior-lead mode passed its 4 coding tasks for $1.02, against $0.90 for jev-pilot alone. At this size the junior doesn't pay: DeepSeek's share was under a cent a task, but Opus reading and testing the result costs about what writing it did. It's there for larger, well-specified changes.
+
 ## 0.5.0 — 2026-09-24
 
 **The crew.** Custom models and other coding agents in the same Claude Code session, used the way you choose.

@@ -67,6 +67,17 @@ export function slotHealthy(slot: Slot): boolean {
   return !!h && h.ok && h.detail.startsWith(slot.model)
 }
 
+/**
+ * A slot that may be used: answering its last check, or not checked yet (a
+ * headless run's first prompt arrives before the check). An unchecked slot
+ * is safe to try: if it fails, the router gives the request to Claude.
+ * Only a slot that failed its check is left out.
+ */
+export function slotUsable(slot: Slot): boolean {
+  const h = health.get(`slot:${slot.name}`)
+  return !h || !h.detail.startsWith(slot.model) || h.ok
+}
+
 export function reviewerHealthy(reviewer: Reviewer): boolean {
   return health.get(`agent:${reviewer}`)?.ok === true
 }

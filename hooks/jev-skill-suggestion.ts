@@ -86,6 +86,7 @@ import {
   classifyText,
   commandLike,
   decide,
+  pickSkill,
   describeRerank,
   describeSetup,
   describeStatus,
@@ -123,7 +124,8 @@ import {
   MAX_CHOICES,
   mergeWide,
 } from './skill-suggestion.policy.ts'
-import type { Candidate, PolicyConfig, Provider, Rerank, Skill, Wide } from './skill-suggestion.policy.ts'
+import type { Candidate, PolicyConfig, Provider, Rerank, Skill, Suggestion, Wide } from './skill-suggestion.policy.ts'
+import { isContinuation, takePart } from './jev-call.ts'
 
 export const register: Register = (on, options) => {
   const text = (key: string, fallback: string) =>
@@ -160,9 +162,10 @@ export const register: Register = (on, options) => {
   const injectContent = text('inject', 'content') !== 'suggest'
   const alwaysListed = parseNames(text('alwaysListed', ''))
   const neverSuggested = parseNames(text('neverSuggested', ''))
-  const rerankEnabled = flag('rerank', true)
-  const excerptChars = number('excerptChars', 700)
-  const timeoutMs = number('timeoutMs', 800)
+  // Off (the default): the one request decides. On: a second request re-reads the shortlist.
+  const rerankEnabled = flag('rerank', false)
+  const excerptChars = number('excerptChars', 300)
+  const timeoutMs = number('timeoutMs', 1500)
   const logDecisions = flag('logDecisions', true)
   // One line per turn (written by the router) by default; every step here with verboseLog.
   const verbose = logDecisions && flag('verboseLog', false)
@@ -266,17 +269,29 @@ export const register: Register = (on, options) => {
       if (verbose) $.ui.log(`[jev-skill-suggestion] ${describeSetup(active, url, hideListing, forced === 'builtin')}`)
     }
     suggested = null
-    if (!feature('skills')) return next(e)
+    // The router's questions for this prompt, to send with ours in one
+    // request (jev-call.ts). Whatever happens here, they are sent and settled.
+    const part = takePart(e.text)
+    /** Passes the prompt on, the router's part asked alone when no ranking carried it. */
+    const alone = async (input: typeof e) => {
+      if (!part) return next(input)
+      const block = await part.settle(await part.ask({}))
+      return next(block ? { ...input, context: [...(input.context ?? []), block] } : input)
+    }
+    if (!feature('skills')) return alone(e)
 
     // Notifications and peer messages are not tasks; a typed `/name` already
-    // names its skill. Neither gets a suggestion.
-    if (!e.text.trim() || /^\/\S/.test(e.text.trim())) return next(e)
-    if (e.origin && NOT_A_TASK.has(e.origin.kind)) return next(e)
+    // names its skill. Neither gets a suggestion. Nor does "continue": the
+    // work in progress already has what it loaded.
+    if (!e.text.trim() || /^\/\S/.test(e.text.trim())) return alone(e)
+    if (e.origin && NOT_A_TASK.has(e.origin.kind)) return alone(e)
+    if (isContinuation(e.text)) return alone(e)
 
     // The conversation before the prompt, so a follow-up is read as the work
-    // it continues. Read only when a backend will receive it.
+    // it continues. Read only when a backend will receive it, and not when
+    // the router's part already carries it.
     let recent = ''
-    if (active && contextLimits.messages > 0) {
+    if (active && !part && contextLimits.messages > 0) {
       try {
         recent = recentContext(await $.session.messages(), e.text, contextLimits)
       } catch (error) {
@@ -385,38 +400,60 @@ export const register: Register = (on, options) => {
       commands = canonical(commands, displayToId ?? new Map())
     } catch (error) {
       $.ui.log(`[jev-skill-suggestion] could not list the skills: ${String(error)}`)
-      return next(e)
+      return alone(e)
     }
     // Loading the skill itself, the mod is not bound to what the engine would
     // list: a skill hidden with skillOverrides is still a candidate.
-    const skills = catalog(commands, injectContent ? new Set() : listed, neverSuggested)
-    if (skills.length === 0) {
+    const listedSkills = catalog(commands, injectContent ? new Set() : listed, neverSuggested)
+    if (listedSkills.length === 0) {
       if (verbose) $.ui.log('[jev-skill-suggestion] no candidate skills; nothing to suggest')
-      return next(e)
+      return alone(e)
     }
     const pluginOf = new Map(commands.map((command) => [command.name, command.plugin]))
+    // Each skill as Jev reads it, in the one request: its description and the
+    // opening of its SKILL.md (read once per session), without the skills
+    // whose own frontmatter says the model may not invoke them.
+    const barred: string[] = []
+    const skills: Skill[] = []
+    for (const skill of listedSkills) {
+      const body = active && !rerankEnabled ? await bodyOf(skill, pluginOf.get(skill.name)) : null
+      if (body !== null && !modelInvocable(body)) {
+        barred.push(skill.name)
+        continue
+      }
+      skills.push(active && !rerankEnabled ? { ...skill, description: detailOf(skill, body, excerptChars) } : skill)
+    }
+    if (skills.length === 0) return alone(e)
 
-    // Request 1: rank everything, and ask whether the prompt wants a skill at all.
+    // Request 1: rank everything, and ask whether the prompt wants a skill at
+    // all. The first batch carries the router's questions too: one request.
     const startedAt = await $.clock.now()
     let wide: Wide | null = null
+    let parts: (Wide | null)[] = []
+    let routerBlock: string | null = null
+    let routerSettled = false
     // The shortlist grows with the batches, so every batch's leaders reach
     // the rerank (their scores do not compare across batches).
     let picked: PolicyConfig = policy
     if (active) {
       // One Choice takes at most MAX_CHOICES options: a larger catalog is
       // ranked in batches, side by side, and the gate asked once.
-      const batches = batchesOf(skills)
+      const batches = batchesOf(skills, MAX_CHOICES - 1)
       picked = { ...policy, shortlist: Math.min(MAX_CHOICES, policy.shortlist * batches.length) }
+      const withNone = !rerankEnabled
       const answers = await Promise.all(
-        batches.map((batch, index) =>
-          ask(
-            e.text,
-            wideQuestions(active, batch, index === 0),
-            batches.length > 1 ? `ranking ${index + 1}/${batches.length}` : 'ranking',
-          ),
-        ),
+        batches.map(async (batch, index) => {
+          const questions = wideQuestions(active, batch, index === 0, withNone)
+          const what = batches.length > 1 ? `ranking ${index + 1}/${batches.length}` : 'ranking'
+          if (index > 0 || !part) return ask(e.text, questions, what)
+          const answer = await part.ask(questions)
+          routerSettled = true
+          routerBlock = await part.settle(answer)
+          return answer.text
+        }),
       )
-      wide = mergeWide(answers.map((answer) => (answer ? readWide(answer) : null)))
+      parts = answers.map((answer) => (answer ? readWide(answer) : null))
+      wide = mergeWide(parts)
     } else {
       // No backend: the engine's own small-model classifier answers the same
       // question, with the descriptions folded into the text it reads. One
@@ -427,10 +464,12 @@ export const register: Register = (on, options) => {
           ...skills.map((skill) => skill.name),
         ])
         wide = builtinWide(label)
+        parts = [wide]
       } catch (error) {
         $.ui.log(`[jev-skill-suggestion] built-in classifier failed: ${String(error)}`)
       }
     }
+    if (part && !routerSettled) routerBlock = await part.settle(await part.ask({}))
     // What the decision model actually answered, whatever the policy then
     // does with it. This is the line that proves the ranking ran.
     if (verbose) {
@@ -438,40 +477,41 @@ export const register: Register = (on, options) => {
       $.ui.log(`[jev-skill-suggestion] jev: ${describeWide(wide, skills.length, ms)}`)
     }
 
-    // Request 2: re-read the shortlist with each skill's full text, and let
-    // every candidate be rejected on its own.
-    let rerank: Rerank | null = null
-    let rerankAttempted = false
-    // Before the listing has been seen, `$.command.list()` may name a skill
-    // the model is not allowed to invoke; its own frontmatter tells.
-    const barred: string[] = []
-    if (active && rerankEnabled && wide && passesGate(wide, policy)) {
-      const candidates: Candidate[] = []
-      for (const skill of shortlistOf(wide, skills, picked.shortlist)) {
-        const body = await bodyOf(skill, pluginOf.get(skill.name))
-        if (!modelInvocable(body)) {
-          barred.push(skill.name)
-          continue
+    let decision: Suggestion
+    if (active && rerankEnabled) {
+      // Request 2 (the `rerank` option): re-read the shortlist with each
+      // skill's full text, and let every candidate be rejected on its own.
+      let rerank: Rerank | null = null
+      let rerankAttempted = false
+      if (wide && passesGate(wide, policy)) {
+        const candidates: Candidate[] = []
+        for (const skill of shortlistOf(wide, skills, picked.shortlist)) {
+          const body = await bodyOf(skill, pluginOf.get(skill.name))
+          if (!modelInvocable(body)) {
+            barred.push(skill.name)
+            continue
+          }
+          candidates.push({ ...skill, detail: detailOf(skill, body, excerptChars) })
         }
-        candidates.push({ ...skill, detail: detailOf(skill, body, excerptChars) })
-      }
-      if (candidates.length > 0) {
-        const rerankStartedAt = await $.clock.now()
-        rerankAttempted = true
-        const answer = await ask(e.text, rerankQuestions(active, candidates), 'rerank')
-        if (answer) rerank = readRerank(answer)
-        if (verbose) {
-          const ms = (await $.clock.now()) - rerankStartedAt
-          const read = candidates.filter((candidate) => files.get(candidate.name)).length
-          $.ui.log(
-            `[jev-skill-suggestion] jev: ${describeRerank(rerank, ms)} · ${read}/${candidates.length} bodies read`,
-          )
+        if (candidates.length > 0) {
+          const rerankStartedAt = await $.clock.now()
+          rerankAttempted = true
+          const answer = await ask(e.text, rerankQuestions(active, candidates), 'rerank')
+          if (answer) rerank = readRerank(answer)
+          if (verbose) {
+            const ms = (await $.clock.now()) - rerankStartedAt
+            const read = candidates.filter((candidate) => files.get(candidate.name)).length
+            $.ui.log(`[jev-skill-suggestion] jev: ${describeRerank(rerank, ms)} · ${read}/${candidates.length} bodies read`)
+          }
         }
       }
+      const offered = barred.length > 0 ? skills.filter((skill) => !barred.includes(skill.name)) : skills
+      decision = decide(wide, rerank, offered, picked, rerankAttempted)
+    } else if (active) {
+      decision = pickSkill(parts, skills, policy)
+    } else {
+      decision = decide(wide, null, skills, picked, false)
     }
-
-    const offered = barred.length > 0 ? skills.filter((skill) => !barred.includes(skill.name)) : skills
-    let decision = decide(wide, rerank, offered, picked, rerankAttempted)
     let pick = decision.name ? (skills.find((skill) => skill.name === decision.name) ?? null) : null
     // The winner's own frontmatter has the last word, whichever path picked it.
     if (pick && !barred.includes(pick.name) && !modelInvocable(await bodyOf(pick, pluginOf.get(pick.name)))) {
@@ -514,10 +554,11 @@ export const register: Register = (on, options) => {
     } else {
       block = suggestionBlock(pick, hideListing)
     }
-    if (!block) return next(e)
-    // Attached on the way down: one block after the prompt as typed, read by
-    // the model and never shown to the person.
-    return next({ ...e, context: [...(e.context ?? []), block] })
+    // Attached on the way down, the router's advice first: blocks after the
+    // prompt as typed, read by the model and never shown to the person.
+    const blocks = [routerBlock, block].filter((b): b is string => b !== null)
+    if (blocks.length === 0) return next(e)
+    return next({ ...e, context: [...(e.context ?? []), ...blocks] })
   })
 
   // An injected skill lives in the conversation, not the process: `/clear`

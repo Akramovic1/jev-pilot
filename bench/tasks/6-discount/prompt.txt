@@ -1,0 +1,1 @@
+tests/discount.spec.ts fails. Fix src/discount.ts so that it follows the rules in its comment. Don't change the tests.

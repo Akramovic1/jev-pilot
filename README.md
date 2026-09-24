@@ -171,11 +171,9 @@ flowchart LR
 
 Advice is attached only when Jev is confident (0.6, or 0.8 for `graph`) and it agrees with the tier. Claude may ignore it.
 
-**Skills.** At most one per prompt, picked in two steps:
-1. Rank every skill by its description. Catalogs over the API's 255-choice limit are ranked in parallel batches.
-2. Re-read the top three with their `SKILL.md`; each can be rejected.
+**Skills.** At most one per prompt. Jev reads every skill's description and the opening of its `SKILL.md`, next to a "none of these fits" option, and is asked to match the kind of work (debugging, planning, reviewing…), not a product the prompt happens to name. A skill is picked when Jev is sure of it, or when the prompt needs a skill and it still fits. The winner's `SKILL.md` is added to the prompt.
 
-The winner's `SKILL.md` is added to the prompt. `/jev-pilot:setup` can hide your own skills from Claude's skill list entirely (it asks first; `restore` undoes it).
+**One request per prompt.** The effort, model, strategy and skill questions all go to Jev together, in one request of about 0.5 s. Before 0.6 there were three requests one after another: effort and strategy, the skill ranking, then a re-check of the top skills, about 1.5 s in all. On 16 test prompts the single request picked the same skill 14 times, and the other two picks were better. A plain "continue" asks nothing: the work goes on as the last turn decided. (Catalogs over the API's 255-choice limit are ranked in parallel batches, so it's still one wait.) `/jev-pilot:setup` can hide your own skills from Claude's skill list entirely (it asks first; `restore` undoes it).
 
 ## 🛩️ Meet the pilot
 
@@ -258,7 +256,7 @@ health:
   opencode   ✓  opencode 1.18.30 · GitHub Copilot, Fireworks AI, OpenAI…
 ```
 
-A custom model has to answer a 1-token request, Codex has to be logged in, and OpenCode has to have a provider logged in. Only the workers that pass are used. If the junior's model is down, the junior runs on Sonnet. If the chosen reviewer is down, the other one reviews, and if both are down, Claude says there was no external review.
+A custom model has to answer a 1-token request, Codex has to be logged in, and OpenCode has to have a provider logged in. Workers that fail their check aren't used. A custom model not checked yet (the first prompt of a headless run) is used, since the router falls back to Claude if it fails. If the junior's model is down, the junior runs on Sonnet. If the chosen reviewer is down, the other one reviews, and if both are down, Claude says there was no external review.
 
 <details>
 <summary><b>How custom models reach Claude Code</b></summary>
@@ -271,6 +269,17 @@ Claude Code talks to one server. `claude-jev` starts **jev-router**, a small loc
 - Every other request streams through to Anthropic unchanged, headers and all, so your Claude login and plan work exactly as before. The OpenRouter key never goes to Anthropic, and your Claude login never goes to OpenRouter.
 
 The router reads the slots from `~/.claude/jev-pilot/models.json`, which jev-pilot writes, so `/jev alpha <model>` applies at once. It logs which slot went where (never the content) to `~/.claude/jev-pilot/router.log`. `claude-jev` also sets `ENABLE_TOOL_SEARCH=true`: without it, Claude Code sends every tool's schema with every request when it talks to a custom server.
+
+**A custom model that fails never fails your work.** If OpenRouter is down or busy, the model is gone, or it doesn't start answering within 60 s, the router sends the same request to Anthropic as Sonnet, with the session's own login. It uses the Sonnet id it has seen in your own traffic and kept on disk, so no model version is written into it. `/jev status` shows each fallback and its reason. Only a failure after the answer has started streaming can't be taken back.
+
+**It stays up.** The router runs in its own session under a small supervisor. Closing the terminal that started it doesn't stop it, since other `claude-jev` sessions depend on it, and if it crashes it's back within a second. After an update, `claude-jev` replaces a router of an older version.
+
+```
+claude-jev router status     is it running, and what has fallen back
+claude-jev router stop       stop it (the next claude-jev starts it again)
+```
+
+Open `claude-jev` sessions reach Claude through the router, so after a stop they need a restart.
 
 `JEV_ROUTER=off claude-jev` starts without the router. Custom models are then off, and everything else works as before. `JEV_ROUTER_PORT` changes the port.
 
@@ -297,6 +306,26 @@ Jev answered 97% of turns; latency median 540 ms, 90th percentile 910 ms.
 
 After 20 or more turns, it suggests specific changes, such as a longer `timeoutMs` if answers arrive late, or leaning up more if cheap starts keep getting raised. It asks before editing anything. `/jev-pilot:report reset` clears the record.
 
+**It learns from you.** You don't have to run the report. Every 20 turns jev-pilot reads the ledger itself, and when it points one way it says so in one line: `tune? minHighConfidence 0.5→0.6 · /jev tune`. For example, if your turns started at `high` keep finishing in two tool calls, high should take a surer answer. If turns started low keep getting raised, it should lean up. Nothing changes until you say so:
+
+```
+/jev tune          what's tuned, and what your last turns suggest
+/jev tune apply    take the suggestion (on top of your settings, which stay as they are)
+/jev tune reset    back to your settings
+```
+
+Each change needs 20 new turns of evidence before the next one, so the same turns never push twice.
+
+**What this session came to.** `/jev` ends with a tally, and the bubble shows it every tenth turn:
+
+```
+this session: 24 turns · 11 started below your high effort, 2 above · 6 of 8 subagents on a cheaper model (4 haiku, 2 jev-alpha) · 310k tokens on them instead of the main model
+```
+
+These are counts, not dollars: prices differ by plan, and what a turn would have cost at another effort is something nobody saw.
+
+**Measured.** [jev-bench](bench/) runs eight small coding tasks headless, with and without jev-pilot, and checks each result automatically. With 0.6.0 both setups passed all 8, and jev-pilot cost 13% less ($1.92 against $2.20). It was cheaper on 7 tasks and dearer on the one hard bug, where it chose to think more. The `junior-lead` mode passed its 4 coding tasks but cost a little more than jev-pilot alone: on tasks this small, the lead's review costs about what writing the code did.
+
 ## ⚙️ Configuration
 
 Every option has a sensible default. On a marketplace install, change options with `/plugin configure jev-pilot@jev-pilot` in Claude Code. On a clone install, edit `pluginConfigs["jev-pilot"].options` in `~/.claude/settings.json`. The on/off options are also switches you can flip live with [`/jev`](#switch-any-part-on-or-off).
@@ -309,7 +338,7 @@ Every option has a sensible default. On a marketplace install, change options wi
 | Option | Default | What it does |
 |---|---|---|
 | `openrouterApiKey` / `typesafeApiKey` / `gatewayApiKey` | — | the backend key |
-| `timeoutMs` | 800 (installer sets 1500) | how long to wait for Jev before leaving a turn as Claude Code built it |
+| `timeoutMs` | 1500 | how long to wait for Jev's one request before leaving a turn as Claude Code built it |
 | `maxEffort` | `xhigh` | the highest effort a turn may start at |
 | `maxRaisedEffort` | `max` | the highest effort the mid-turn raise may reach |
 | `escalateAfterErrors` | 2 | failed tool calls in a row before a raise; 0 turns raising off |
@@ -354,12 +383,12 @@ All options are listed, with descriptions, in [`.claude-plugin/plugin.json`](.cl
 
 ## 🔒 Cost, latency and privacy
 
-- **Latency:** each prompt waits for up to three small Jev requests: effort and strategy, then the skill ranking and its re-check. That's typically about 1.5 s in total, and each request is capped at `timeoutMs`. If Jev doesn't answer in time, the turn runs exactly as Claude Code built it.
+- **Latency:** each prompt waits for one Jev request, typically about 0.5 s, capped at `timeoutMs`. If Jev doesn't answer in time, the turn runs exactly as Claude Code built it.
 - **Cost:** Jev requests are small. The largest is the skill ranking, which sends every skill's description.
 - **What leaves your machine** goes only to the backend you chose:
   - the prompt;
   - the recent messages' text and tool names;
-  - skill names and descriptions, and the opening of the shortlisted `SKILL.md` files.
+  - skill names and descriptions, and the opening (300 characters) of each skill's `SKILL.md`.
 
   Tool input and output are never sent. `contextMessages: 0` sends no conversation.
 - **The crew:** a custom model gets the subagent's whole conversation, through OpenRouter, like any model would. A reviewer runs the `codex` or `opencode` CLI on your machine, which reads your code and talks to its own provider with your own login. Neither happens in `standard` mode unless you ask for a review.

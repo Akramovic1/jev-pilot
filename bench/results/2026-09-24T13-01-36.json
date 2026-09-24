@@ -1,0 +1,24 @@
+[
+ {
+  "task": "5-duration",
+  "setup": "junior",
+  "run": 1,
+  "passed": true,
+  "costUsd": 0.32139207999999997,
+  "inputTokens": 4,
+  "outputTokens": 616,
+  "cacheReadTokens": 63180,
+  "cacheWriteTokens": 2161,
+  "turns": 2,
+  "seconds": 8,
+  "stopped": null,
+  "models": {
+   "opus-5-5[1m]": 0.313,
+   "jev-alpha": 0.008
+  },
+  "jev": [
+   "medium→medium (balanced)",
+   "no answer"
+  ]
+ }
+]

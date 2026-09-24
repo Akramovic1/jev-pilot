@@ -1,0 +1,1 @@
+createUser in src/users.ts accepts anything. Make it throw ValidationError (already defined there) when the email has no @ or contains a space, or when the name is empty after trimming or longer than 50 characters. Store the trimmed name. Add tests for this in tests/users.spec.ts.

@@ -476,14 +476,16 @@ export function mergeWide(parts: readonly (Wide | null)[]): Wide | null {
  * The first request's `questions`: the ranking and, unless `withGate` is
  * off (every batch after the first), the gate.
  */
-export function wideQuestions(provider: Provider, skills: readonly Skill[], withGate = true): Record<string, unknown> {
+export function wideQuestions(provider: Provider, skills: readonly Skill[], withGate = true, withNone = false): Record<string, unknown> {
   const criteria: Record<string, string> = {}
   for (const skill of skills) criteria[skill.name] = skill.description || `A skill named ${skill.name}.`
+  if (withNone) criteria[NO_SKILL] = NO_SKILL_CRITERION
   const questions: Record<string, unknown> = {
     which: {
       type: 'choice',
-      instructions:
-        "Which of these skills, if any, is the right one to load to help with the user's latest request?",
+      instructions: withNone
+        ? WHICH_INSTRUCTIONS
+        : "Which of these skills, if any, is the right one to load to help with the user's latest request?",
       criteria,
     },
   }
@@ -493,6 +495,58 @@ export function wideQuestions(provider: Provider, skills: readonly Skill[], with
     }
   }
   return questions
+}
+
+/**
+ * The option that says no skill fits, beside the skills in the one request.
+ * Without it the ranking always names a skill, and a weak one (a rename
+ * ranked `supabase` at 0.11) is only caught by a second request. With it,
+ * Jev puts its weight on "none" instead: measured on 16 prompts, the one
+ * request agreed with the two-request pick on 14, and the other two were
+ * better (no skill for a rename; the Postgres skill for a Supabase table).
+ * Parentheses keep it apart from any skill's name.
+ */
+export const NO_SKILL = '(none)'
+export const NO_SKILL_CRITERION =
+  'None of these skills fits: the request is ordinary work that no listed skill is specifically about.'
+/**
+ * Asked to match the kind of work, a failing test goes to a debugging skill
+ * rather than to a skill named after the library it happens to mention (it
+ * went to `queues` for a job-queue test before).
+ */
+export const WHICH_INSTRUCTIONS =
+  "Which of these skills, if any, is the right one to load to help with the user's latest request? Match the kind of work the request asks for (such as debugging a failure, planning, reviewing, designing, writing a document), not only a product or technology it names."
+
+/** A choice this sure of one skill picks it whatever the gate says. */
+export const SURE_PICK = 0.5
+
+/**
+ * The pick from the one request (each batch's answer, in order), without a
+ * second request: the best skill leading its batch (a batch led by "none"
+ * offers nothing), taken when Jev is sure of it, or when the prompt needs a
+ * skill and it still fits. The gate alone had blocked sure picks
+ * ("brainstorm ideas…" at 0.82 with a gate of 0.09).
+ */
+export function pickSkill(parts: readonly (Wide | null)[], skills: readonly Skill[], config: PolicyConfig): Suggestion {
+  if (parts.length === 0 || parts.some((part) => part === null)) return { name: null, reason: 'no answer' }
+  const known = new Set(skills.map((skill) => skill.name))
+  let best: { name: string; probability: number } | null = null
+  for (const part of parts as Wide[]) {
+    const leader = part.ranked[0]
+    if (!leader || leader.name === NO_SKILL || !known.has(leader.name)) continue
+    const probability = leader.probability ?? 0
+    if (!best || probability > best.probability) best = { name: leader.name, probability }
+  }
+  if (!best) return { name: null, reason: 'Jev: no skill fits' }
+  const gate = (parts[0] as Wide).gate
+  if (best.probability >= SURE_PICK) return { name: best.name, reason: `Jev chose it (${best.probability.toFixed(2)})` }
+  if ((gate === null || gate >= config.gateThreshold) && best.probability >= config.fitsThreshold) {
+    return { name: best.name, reason: `needs a skill ${gate === null ? 'n/d' : gate.toFixed(2)}, and it fits (${best.probability.toFixed(2)})` }
+  }
+  return {
+    name: null,
+    reason: `${best.name} only ${best.probability.toFixed(2)}${gate !== null && gate < config.gateThreshold ? `, needs a skill ${gate.toFixed(2)}` : ''}`,
+  }
 }
 
 /** The second request's `questions`: the shortlist re-read, one `fits` each. */

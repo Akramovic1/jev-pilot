@@ -47,25 +47,50 @@ export CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1
 # every Claude request passes through to Anthropic unchanged. It is started
 # once and shared by every session. JEV_ROUTER=off skips it; if it can't
 # start, Claude Code runs as usual, without custom models.
+router_health() { curl -fsS --max-time 1 "$1/jev-router/health" 2>/dev/null; }
+
 start_router() {
   [[ "${JEV_ROUTER:-on}" == "off" ]] && return 0
-  local root="$1" port="${JEV_ROUTER_PORT:-8799}" runtime url
+  local root="$1" port="${JEV_ROUTER_PORT:-8799}" runtime url health running wanted
   local script="$root/router/jev-router.mjs"
   [[ -f "$script" ]] && command -v curl >/dev/null 2>&1 || return 0
   runtime="$(command -v node || command -v bun)" || return 0
   url="http://127.0.0.1:$port"
   # Already behind this router (a nested claude-jev): nothing to do.
   [[ "${ANTHROPIC_BASE_URL:-}" == "$url" ]] && return 0
-  if ! curl -fsS --max-time 1 "$url/jev-router/health" >/dev/null 2>&1; then
+  health="$(router_health "$url" || true)"
+  # A router of another version (left from before an update) makes way.
+  wanted="$(grep -Eo "ROUTER_VERSION = '[^']+'" "$script" | head -1 | grep -Eo "'[^']+'" | tr -d "'" || true)"
+  running="$(printf '%s' "$health" | grep -Eo '"version":"[^"]+"' | head -1 | cut -d'"' -f4 || true)"
+  if [[ -n "$health" && "$running" != "$wanted" ]]; then
+    if ! curl -fsS --max-time 1 -X POST "$url/jev-router/stop" >/dev/null 2>&1; then
+      # A router from before 0.6 has no stop: found by its port, and ended
+      # only if it really is jev-router.
+      local pid
+      pid="$(ss -ltnpH "sport = :$port" 2>/dev/null | grep -Eo 'pid=[0-9]+' | head -1 | cut -d= -f2 || true)"
+      if [[ -n "$pid" ]] && tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null | grep -q 'jev-router.mjs'; then kill "$pid" 2>/dev/null || true; fi
+    fi
+    for _ in 1 2 3 4 5 6 7 8 9 10; do router_health "$url" >/dev/null || break; sleep 0.2; done
+    health=""
+  fi
+  if [[ -z "$health" ]]; then
     mkdir -p "$HOME/.claude/jev-pilot"
+    # The supervisor: runs the router again if it dies, and stops when it
+    # exits cleanly (stopped, or another router has the port) or its file
+    # is gone (an update moved it). In a session of its own (setsid), so
+    # closing the terminal that started it leaves it serving every other
+    # claude-jev session.
+    local detach=()
+    command -v setsid >/dev/null 2>&1 && detach=(setsid)
     JEV_ROUTER_PORT="$port" JEV_ROUTER_UPSTREAM="${ANTHROPIC_BASE_URL:-https://api.anthropic.com}" \
-      nohup "$runtime" "$script" >>"$HOME/.claude/jev-pilot/router.out" 2>&1 &
+      nohup ${detach[@]+"${detach[@]}"} sh -c 'trap "" HUP; while [ -f "$1" ]; do "$0" "$1" && break; sleep 1; done' "$runtime" "$script" \
+      </dev/null >>"$HOME/.claude/jev-pilot/router.out" 2>&1 &
     for _ in 1 2 3 4 5 6 7 8 9 10; do
-      curl -fsS --max-time 1 "$url/jev-router/health" >/dev/null 2>&1 && break
+      router_health "$url" >/dev/null && break
       sleep 0.3
     done
   fi
-  if curl -fsS --max-time 1 "$url/jev-router/health" >/dev/null 2>&1; then
+  if router_health "$url" >/dev/null; then
     # Through a custom address Claude Code would inline every tool's schema
     # (tens of thousands of tokens a request); deferred loading keeps it lean.
     export ANTHROPIC_BASE_URL="$url" JEV_ROUTER_URL="$url" ENABLE_TOOL_SEARCH="${ENABLE_TOOL_SEARCH:-true}"
@@ -73,6 +98,23 @@ start_router() {
     echo "claude-jev: the custom-model router didn't start (see ~/.claude/jev-pilot/router.out); running without custom models" >&2
   fi
 }
+
+# `claude-jev router status|stop`: the custom-model router, by hand.
+router_command() {
+  local url="http://127.0.0.1:${JEV_ROUTER_PORT:-8799}" health
+  case "${1:-status}" in
+    status)
+      if health="$(router_health "$url")"; then echo "jev-router running at $url: $health"; else echo "jev-router not running at $url"; fi ;;
+    stop)
+      if curl -fsS --max-time 1 -X POST "$url/jev-router/stop" >/dev/null 2>&1; then
+        echo "jev-router stopped. claude-jev sessions still open reach Claude through it: restart them (the next claude-jev starts it again)."
+      else
+        echo "jev-router was not running"
+      fi ;;
+    *) echo "usage: claude-jev router [status|stop]" >&2; return 1 ;;
+  esac
+}
+[[ "${1:-}" == "router" ]] && { router_command "${2:-status}"; exit $?; }
 
 if marketplace_install; then
   if [[ "${1:-}" == "self-update" ]]; then

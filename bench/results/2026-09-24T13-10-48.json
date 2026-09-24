@@ -1,0 +1,390 @@
+[
+ {
+  "task": "1-rename",
+  "setup": "off",
+  "run": 1,
+  "passed": true,
+  "costUsd": 0.3458952,
+  "inputTokens": 24,
+  "outputTokens": 3383,
+  "cacheReadTokens": 367136,
+  "cacheWriteTokens": 25589,
+  "turns": 20,
+  "seconds": 36,
+  "stopped": null,
+  "models": {
+   "opus-5-5[1m]": 0.346
+  },
+  "jev": []
+ },
+ {
+  "task": "1-rename",
+  "setup": "jev",
+  "run": 1,
+  "passed": true,
+  "costUsd": 0.2833588,
+  "inputTokens": 18,
+  "outputTokens": 2663,
+  "cacheReadTokens": 242974,
+  "cacheWriteTokens": 22679,
+  "turns": 17,
+  "seconds": 29,
+  "stopped": null,
+  "models": {
+   "opus-5-5[1m]": 0.283
+  },
+  "jev": [
+   "medium→low (fast)"
+  ]
+ },
+ {
+  "task": "2-slugify",
+  "setup": "off",
+  "run": 1,
+  "passed": true,
+  "costUsd": 0.24838519999999997,
+  "inputTokens": 8,
+  "outputTokens": 1542,
+  "cacheReadTokens": 94366,
+  "cacheWriteTokens": 24830,
+  "turns": 5,
+  "seconds": 16,
+  "stopped": null,
+  "models": {
+   "opus-5-5[1m]": 0.248
+  },
+  "jev": []
+ },
+ {
+  "task": "2-slugify",
+  "setup": "jev",
+  "run": 1,
+  "passed": true,
+  "costUsd": 0.2147048,
+  "inputTokens": 12,
+  "outputTokens": 1512,
+  "cacheReadTokens": 143124,
+  "cacheWriteTokens": 19474,
+  "turns": 6,
+  "seconds": 18,
+  "stopped": null,
+  "models": {
+   "opus-5-5[1m]": 0.215
+  },
+  "jev": [
+   "medium→medium (balanced)"
+  ]
+ },
+ {
+  "task": "2-slugify",
+  "setup": "junior",
+  "run": 1,
+  "passed": true,
+  "costUsd": 0.22136708,
+  "inputTokens": 8,
+  "outputTokens": 1745,
+  "cacheReadTokens": 86948,
+  "cacheWriteTokens": 20375,
+  "turns": 5,
+  "seconds": 35,
+  "stopped": null,
+  "models": {
+   "opus-5-5[1m]": 0.215,
+   "jev-alpha": 0.006
+  },
+  "jev": [
+   "medium→medium (balanced)"
+  ]
+ },
+ {
+  "task": "3-flaky",
+  "setup": "off",
+  "run": 1,
+  "passed": true,
+  "costUsd": 0.2649782,
+  "inputTokens": 14,
+  "outputTokens": 2377,
+  "cacheReadTokens": 185911,
+  "cacheWriteTokens": 22525,
+  "turns": 8,
+  "seconds": 27,
+  "stopped": null,
+  "models": {
+   "opus-5-5[1m]": 0.265
+  },
+  "jev": []
+ },
+ {
+  "task": "3-flaky",
+  "setup": "jev",
+  "run": 1,
+  "passed": true,
+  "costUsd": 0.30420660000000005,
+  "inputTokens": 18,
+  "outputTokens": 3867,
+  "cacheReadTokens": 247333,
+  "cacheWriteTokens": 22166,
+  "turns": 11,
+  "seconds": 42,
+  "stopped": null,
+  "models": {
+   "opus-5-5[1m]": 0.304
+  },
+  "jev": [
+   "medium→xhigh (deep)"
+  ]
+ },
+ {
+  "task": "4-search",
+  "setup": "off",
+  "run": 1,
+  "passed": true,
+  "costUsd": 0.21830859999999996,
+  "inputTokens": 10,
+  "outputTokens": 1087,
+  "cacheReadTokens": 119923,
+  "cacheWriteTokens": 21568,
+  "turns": 6,
+  "seconds": 14,
+  "stopped": null,
+  "models": {
+   "opus-5-5[1m]": 0.218
+  },
+  "jev": []
+ },
+ {
+  "task": "4-search",
+  "setup": "jev",
+  "run": 1,
+  "passed": true,
+  "costUsd": 0.18146,
+  "inputTokens": 8,
+  "outputTokens": 593,
+  "cacheReadTokens": 81640,
+  "cacheWriteTokens": 19155,
+  "turns": 4,
+  "seconds": 10,
+  "stopped": null,
+  "models": {
+   "opus-5-5[1m]": 0.181
+  },
+  "jev": [
+   "medium→low (fast)"
+  ]
+ },
+ {
+  "task": "5-duration",
+  "setup": "off",
+  "run": 1,
+  "passed": true,
+  "costUsd": 0.2568984,
+  "inputTokens": 12,
+  "outputTokens": 2310,
+  "cacheReadTokens": 154932,
+  "cacheWriteTokens": 22458,
+  "turns": 6,
+  "seconds": 24,
+  "stopped": null,
+  "models": {
+   "opus-5-5[1m]": 0.257
+  },
+  "jev": []
+ },
+ {
+  "task": "5-duration",
+  "setup": "jev",
+  "run": 1,
+  "passed": true,
+  "costUsd": 0.21038199999999999,
+  "inputTokens": 10,
+  "outputTokens": 1613,
+  "cacheReadTokens": 117970,
+  "cacheWriteTokens": 19311,
+  "turns": 6,
+  "seconds": 17,
+  "stopped": null,
+  "models": {
+   "opus-5-5[1m]": 0.21
+  },
+  "jev": [
+   "medium→medium (balanced)"
+  ]
+ },
+ {
+  "task": "5-duration",
+  "setup": "junior",
+  "run": 1,
+  "passed": true,
+  "costUsd": 0.2770446,
+  "inputTokens": 12,
+  "outputTokens": 2748,
+  "cacheReadTokens": 149526,
+  "cacheWriteTokens": 23199,
+  "turns": 7,
+  "seconds": 46,
+  "stopped": null,
+  "models": {
+   "opus-5-5[1m]": 0.271,
+   "jev-alpha": 0.007
+  },
+  "jev": [
+   "medium→medium (balanced)"
+  ]
+ },
+ {
+  "task": "6-discount",
+  "setup": "off",
+  "run": 1,
+  "passed": true,
+  "costUsd": 0.3043154,
+  "inputTokens": 14,
+  "outputTokens": 2261,
+  "cacheReadTokens": 209317,
+  "cacheWriteTokens": 27147,
+  "turns": 9,
+  "seconds": 26,
+  "stopped": null,
+  "models": {
+   "opus-5-5[1m]": 0.304
+  },
+  "jev": []
+ },
+ {
+  "task": "6-discount",
+  "setup": "jev",
+  "run": 1,
+  "passed": true,
+  "costUsd": 0.24295440000000001,
+  "inputTokens": 14,
+  "outputTokens": 1958,
+  "cacheReadTokens": 183732,
+  "cacheWriteTokens": 20874,
+  "turns": 8,
+  "seconds": 23,
+  "stopped": null,
+  "models": {
+   "opus-5-5[1m]": 0.243
+  },
+  "jev": [
+   "medium→medium (balanced)"
+  ]
+ },
+ {
+  "task": "6-discount",
+  "setup": "junior",
+  "run": 1,
+  "passed": true,
+  "costUsd": 0.24272139999999998,
+  "inputTokens": 12,
+  "outputTokens": 2165,
+  "cacheReadTokens": 151827,
+  "cacheWriteTokens": 21126,
+  "turns": 7,
+  "seconds": 23,
+  "stopped": null,
+  "models": {
+   "opus-5-5[1m]": 0.243
+  },
+  "jev": [
+   "medium→medium (balanced)"
+  ]
+ },
+ {
+  "task": "7-currency",
+  "setup": "off",
+  "run": 1,
+  "passed": true,
+  "costUsd": 0.2621938,
+  "inputTokens": 14,
+  "outputTokens": 1985,
+  "cacheReadTokens": 189789,
+  "cacheWriteTokens": 23060,
+  "turns": 7,
+  "seconds": 23,
+  "stopped": null,
+  "models": {
+   "opus-5-5[1m]": 0.262
+  },
+  "jev": []
+ },
+ {
+  "task": "7-currency",
+  "setup": "jev",
+  "run": 1,
+  "passed": true,
+  "costUsd": 0.24718180000000003,
+  "inputTokens": 16,
+  "outputTokens": 1902,
+  "cacheReadTokens": 213669,
+  "cacheWriteTokens": 20793,
+  "turns": 9,
+  "seconds": 23,
+  "stopped": null,
+  "models": {
+   "opus-5-5[1m]": 0.247
+  },
+  "jev": [
+   "medium→medium (balanced)"
+  ]
+ },
+ {
+  "task": "8-validate",
+  "setup": "off",
+  "run": 1,
+  "passed": true,
+  "costUsd": 0.302397,
+  "inputTokens": 14,
+  "outputTokens": 2463,
+  "cacheReadTokens": 207005,
+  "cacheWriteTokens": 26460,
+  "turns": 9,
+  "seconds": 27,
+  "stopped": null,
+  "models": {
+   "opus-5-5[1m]": 0.302
+  },
+  "jev": []
+ },
+ {
+  "task": "8-validate",
+  "setup": "jev",
+  "run": 1,
+  "passed": true,
+  "costUsd": 0.23156000000000002,
+  "inputTokens": 12,
+  "outputTokens": 2113,
+  "cacheReadTokens": 148460,
+  "cacheWriteTokens": 19945,
+  "turns": 8,
+  "seconds": 22,
+  "stopped": null,
+  "models": {
+   "opus-5-5[1m]": 0.232
+  },
+  "jev": [
+   "medium→medium (balanced)"
+  ]
+ },
+ {
+  "task": "8-validate",
+  "setup": "junior",
+  "run": 1,
+  "passed": true,
+  "costUsd": 0.27965356,
+  "inputTokens": 8,
+  "outputTokens": 849,
+  "cacheReadTokens": 134224,
+  "cacheWriteTokens": 3223,
+  "turns": 4,
+  "seconds": 10,
+  "stopped": null,
+  "models": {
+   "opus-5-5[1m]": 0.272,
+   "jev-alpha": 0.008
+  },
+  "jev": [
+   "medium→medium (balanced)",
+   "no answer"
+  ]
+ }
+]

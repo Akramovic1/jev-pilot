@@ -93,9 +93,34 @@ export async function checkAgents(io: CrewIo): Promise<void> {
   }
 }
 
+/** The router still answering, and any custom model it had to hand to Claude. */
+export async function checkRouter(io: CrewIo): Promise<void> {
+  const url = router()
+  if (!url) return
+  const answer = await within(io, 1500, io.fetch(`${url}/jev-router/health`, { method: 'GET' }).catch(() => null))
+  if (!answer || !answer.ok) {
+    setHealth('router', { ok: false, detail: `no answer at ${url}`, at: Date.now() })
+    return
+  }
+  setHealth('router', { ok: true, detail: `${url}${fallbackNote(answer.text)}`, at: Date.now() })
+}
+
+/** "· alpha fell back to claude-sonnet-5 2× (OpenRouter 503)", from the router's health answer. */
+export function fallbackNote(healthText: string): string {
+  try {
+    const fallbacks = (JSON.parse(healthText) as { fallbacks?: Record<string, { count?: number; to?: string; why?: string }> }).fallbacks ?? {}
+    const notes = Object.entries(fallbacks)
+      .filter(([, f]) => typeof f?.count === 'number' && f.count > 0)
+      .map(([slot, f]) => `${slot} fell back to ${f.to ?? 'Claude'} ${f.count}× (last: ${String(f.why ?? '').slice(0, 60)})`)
+    return notes.length > 0 ? ` · ${notes.join('; ')}` : ''
+  } catch {
+    return ''
+  }
+}
+
 /** Every check, in parallel. */
 export async function checkCrew(io: CrewIo, key: string | null): Promise<void> {
-  await Promise.all([...crew().slots.map((slot) => checkSlot(io, key, slot.name, slot.model)), checkAgents(io)])
+  await Promise.all([...crew().slots.map((slot) => checkSlot(io, key, slot.name, slot.model)), checkAgents(io), checkRouter(io)])
 }
 
 /** The small Claude model a reviewer runs on: it only relays. */

@@ -206,7 +206,8 @@ function fakeIo(registered: string[]): CrewIo {
     write: async () => undefined,
     run: async (argv) => (argv[0] === 'codex' ? { exitCode: 0, stdout: 'Logged in using ChatGPT', stderr: '' } : { exitCode: 127, stdout: '', stderr: '' }),
     storeGet: async () => ({ mode: 'junior-lead' }),
-    sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    // The checks' time limits never run out here: every answer is immediate.
+    sleep: () => new Promise<void>(() => undefined),
     register: async (spec) => {
       registered.push(spec.name)
     },
@@ -223,7 +224,7 @@ test('after a reload the crew is set up again on first use: router, saved mode, 
   expect(router()).toBe('http://127.0.0.1:8799')
   expect(registered).toContain('junior')
   // The checks run in the background; once they're in, the working reviewer registers.
-  for (let i = 0; i < 50 && !registered.includes('codex-review'); i++) await new Promise((resolve) => setTimeout(resolve, 10))
+  for (let i = 0; i < 200 && !registered.includes('codex-review'); i++) await Promise.resolve()
   expect(healthOf('agent:codex')?.ok).toBe(true)
   expect(registered).toContain('codex-review')
   expect(registered).not.toContain('opencode-review')
@@ -240,4 +241,41 @@ test('only reviewers that passed their check are registered', async () => {
   const registered: string[] = []
   await registerCrew(fakeIo(registered))
   expect(registered).toEqual(['opencode-review'])
+})
+
+// ---- the router's fallback -----------------------------------------------------------
+
+test('the router falls back to the Sonnet it has seen, else any Claude it has seen, else the one set', async () => {
+  // @ts-expect-error: a plain .mjs module
+  const { learnModel, fallbackModel } = await import('../router/jev-router.mjs')
+  const seen = { sonnet: null, any: null }
+  expect(fallbackModel(seen, {})).toBeNull()
+  expect(learnModel('jev-alpha', seen)).toBe(false)
+  expect(learnModel('claude-opus-5-5', seen)).toBe(true)
+  expect(fallbackModel(seen, {})).toBe('claude-opus-5-5')
+  learnModel('claude-sonnet-5', seen)
+  learnModel('claude-haiku-4-5-20251001', seen)
+  expect(fallbackModel(seen, {})).toBe('claude-sonnet-5')
+  expect(fallbackModel(seen, { JEV_ROUTER_FALLBACK_MODEL: 'claude-opus-5-5' })).toBe('claude-opus-5-5')
+})
+
+test('/jev status names each custom model that fell back, and why', async () => {
+  const { fallbackNote } = await import('../hooks/crew-run.ts')
+  const health = JSON.stringify({ ok: true, fallbacks: { alpha: { count: 2, to: 'claude-sonnet-5', why: 'OpenRouter 503: busy' } } })
+  expect(fallbackNote(health)).toBe(' · alpha fell back to claude-sonnet-5 2× (last: OpenRouter 503: busy)')
+  expect(fallbackNote(JSON.stringify({ ok: true, fallbacks: {} }))).toBe('')
+  expect(fallbackNote('not json')).toBe('')
+})
+
+test('a slot not checked yet may be used (the router falls back if it fails); one that failed may not', async () => {
+  const { slotUsable } = await import('../hooks/crew-state.ts')
+  const alpha = { name: 'alpha', model: 'deepseek/deepseek-v4.1-flash', when: '' }
+  initCrew({})
+  expect(slotUsable(alpha)).toBe(true)
+  setHealth('slot:alpha', { ok: false, detail: 'deepseek/deepseek-v4.1-flash · HTTP 404', at: 0 })
+  expect(slotUsable(alpha)).toBe(false)
+  // A failed check of the slot's old model says nothing about its new one.
+  expect(slotUsable({ ...alpha, model: 'qwen/qwen3-coder' })).toBe(true)
+  setHealth('slot:alpha', { ok: true, detail: 'deepseek/deepseek-v4.1-flash · answering', at: 0 })
+  expect(slotUsable(alpha)).toBe(true)
 })

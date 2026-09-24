@@ -1,6 +1,6 @@
 {
   "name": "jev-pilot",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "TypeSafe's Jev decides how Claude Code works on each prompt: the main conversation's reasoning effort (low to xhigh, raised to max mid-turn when tool calls keep failing), each subagent's model, whether to split the work across subagents, and the one skill the prompt needs. Brings in custom OpenRouter models (a junior coder reviewed by Opus, or cheap bulk work) and Codex or OpenCode as reviewers, in modes you choose, each health-checked. Reads the prompt with recent context, records every decision, and suggests its own tuning. Backends: OpenRouter, TypeSafe's API, the Vercel AI Gateway, or Claude Code's built-in classifier. Built on claude-code-templates' jev-model-router and jev-skill-suggestion.",
   "author": {
     "name": "Ahmed Akram",
@@ -228,8 +228,8 @@
     "timeoutMs": {
       "type": "number",
       "title": "Latency budget (ms)",
-      "description": "How long each module waits for a decision before letting the prompt or request through unchanged",
-      "default": 800
+      "description": "How long to wait for Jev's one request per prompt (and per subagent) before letting it through unchanged",
+      "default": 1500
     },
     "display": {
       "type": "string",
@@ -286,8 +286,8 @@
     "rerank": {
       "type": "boolean",
       "title": "Re-read the shortlist",
-      "description": "Send a second request that re-reads the top skills with their full description and SKILL.md opening, and can reject them all; off suggests the top of the ranking alone",
-      "default": true
+      "description": "Send a second request after the first that re-reads the top skills with a longer SKILL.md opening, and can reject them all; off (the default) decides in one request, which offers a \"no skill fits\" option",
+      "default": false
     },
     "shortlist": {
       "type": "number",
@@ -310,8 +310,8 @@
     "excerptChars": {
       "type": "number",
       "title": "SKILL.md excerpt",
-      "description": "How many characters of each shortlisted skill's body the second request reads",
-      "default": 700
+      "description": "How many characters of each skill's SKILL.md Jev reads beside its description",
+      "default": 300
     },
     "alwaysListed": {
       "type": "string",

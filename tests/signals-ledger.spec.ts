@@ -41,7 +41,7 @@ test('recent tools are counted by kind over the last window, failures apart', ()
 
 // --- ledger -------------------------------------------------------------------------
 
-const config: TunableConfig = { timeoutMs: 800, minDowngradeConfidence: 0.6, effortCloseMargin: 0.15 }
+const config: TunableConfig = { timeoutMs: 800, minDowngradeConfidence: 0.6, effortCloseMargin: 0.15, minHighConfidence: 0.5 }
 
 const entry = (patch: Partial<LedgerEntry> = {}): LedgerEntry => ({
   at: Date.UTC(2026, 8, 23),

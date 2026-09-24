@@ -277,8 +277,10 @@ export function requestBody(
   subagent = false,
   slots: readonly SlotChoice[] = [],
   junior = false,
+  /** Another module's questions, asked in the same request (the skill pick). */
+  extra: Record<string, unknown> = {},
 ): string {
-  const asked = questions(provider, withStrategy, subagent, slots, junior)
+  const asked = { ...questions(provider, withStrategy, subagent, slots, junior), ...extra }
   const body = provider !== 'gateway' ? { model, state, questions: asked } : { state, questions: asked }
   return JSON.stringify(body)
 }

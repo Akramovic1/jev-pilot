@@ -99,5 +99,6 @@ export function describeFeatures(): string {
   return [
     'jev-pilot switches (/jev <name> on|off, /jev all on|off, /jev reset):',
     ...FEATURES.map((name) => `  ${feature(name) ? 'on ' : 'off'}  ${name.padEnd(width)}  ${FEATURE_INFO[name]}`),
+    'also: /jev status (the crew and its health) · /jev mode <name> · /jev tune (changes learned from your turns)',
   ].join('\n')
 }

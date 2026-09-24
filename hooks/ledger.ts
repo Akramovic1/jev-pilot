@@ -73,6 +73,8 @@ export interface TunableConfig {
   timeoutMs: number
   minDowngradeConfidence: number
   effortCloseMargin: number
+  /** How sure Jev must be to start a turn at high or above. */
+  minHighConfidence: number
 }
 
 export interface Suggestion {
@@ -149,6 +151,21 @@ export function suggestions(entries: readonly LedgerEntry[], config: TunableConf
   }
 
   // Turns started high that ran short and clean: the start may be too costly.
+  // Turns started at high that turned out easy: high takes a surer answer.
+  const atHigh = entries.filter((entry) => entry.started === 'high')
+  const easyAtHigh = atHigh.filter(
+    (entry) => entry.raisedTo === null && entry.failures === 0 && entry.toolCalls <= 2 && entry.outcome === 'answer',
+  ).length
+  const raisedUp = found.some((suggestion) => suggestion.option === 'minDowngradeConfidence')
+  if (atHigh.length >= 10 && easyAtHigh / atHigh.length > 0.6 && config.minHighConfidence < 0.8 && !raisedUp) {
+    found.push({
+      option: 'minHighConfidence',
+      from: config.minHighConfidence,
+      to: round2(Math.min(0.8, config.minHighConfidence + 0.1)),
+      why: `${share(easyAtHigh, atHigh.length)} of turns started at high finished in two tool calls or fewer, with no failures`,
+    })
+  }
+
   const startedHigh = entries.filter((entry) => entry.started === 'xhigh' || entry.started === 'max')
   const easyHigh = startedHigh.filter(
     (entry) => entry.raisedTo === null && entry.failures === 0 && entry.toolCalls <= 2 && entry.outcome === 'answer',

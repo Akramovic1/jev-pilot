@@ -1,0 +1,1 @@
+Let invoice() in src/invoice.ts take the currency as an optional third argument (EUR when it's left out) and show every amount in it. Keep the existing tests passing.

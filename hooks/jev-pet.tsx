@@ -30,6 +30,9 @@ import {
 } from './features.ts'
 import { applyCrewCommand, describeCrew, parseCrewCommand } from './crew.ts'
 import { resetBriefing } from './summary.ts'
+import { describeStats } from './session-stats.ts'
+import { entriesOf, LEDGER_KEY } from './ledger.ts'
+import { applied, currentTuning, describeTuning, proposals, setTuning, TUNING_KEY, tuningLoaded, tuningOf } from './tuning.ts'
 import { crew, crewOverrides, describeHealth, router, setCrewOverrides } from './crew-state.ts'
 import { CREW_KEY, checkCrew, checkSlot, ensureCrew, publishSlots, registerCrew, type CrewIo } from './crew-run.ts'
 import {
@@ -188,6 +191,29 @@ export const register: Register = (on, options) => {
   })
 
   on('command.run', { command: 'jev' }, async ($, e) => {
+    // `/jev tune [apply|reset]`: the changes the ledger suggests.
+    const tune = /^\s*tune(?:\s+(apply|reset))?\s*$/i.exec(e.args)
+    if (tune) {
+      if (!tuningLoaded()) setTuning(tuningOf(await $.store.get(TUNING_KEY).catch(() => undefined)))
+      const entries = entriesOf(await $.store.get(LEDGER_KEY).catch(() => undefined))
+      const action = tune[1]?.toLowerCase()
+      if (action === 'reset') {
+        setTuning({ values: {}, since: Date.now() })
+        await $.store.delete(TUNING_KEY).catch(() => undefined)
+        return { text: `jev-pilot: tuning cleared; back to your settings.\n\n${describeTuning(entries)}` }
+      }
+      if (action === 'apply') {
+        const found = proposals(entries)
+        if (found.length === 0) return { text: `jev-pilot: nothing to apply.\n\n${describeTuning(entries)}` }
+        const next = applied(currentTuning(), found, Date.now())
+        setTuning(next)
+        await $.store.set(TUNING_KEY, next).catch((error) => $.ui.log(`[jev-pilot] tuning not saved: ${String(error)}`))
+        return {
+          text: `jev-pilot: applied ${found.map((f) => `${f.option} ${f.from} → ${f.to}`).join(', ')}. The next suggestion waits for 20 new turns.\n\n${describeTuning(entries)}`,
+        }
+      }
+      return { text: describeTuning(entries) }
+    }
     // The crew: `/jev status`, `/jev mode ...`, `/jev alpha <model>|off`,
     // `/jev junior <slot>`, `/jev reviewer <codex|opencode>`.
     const crewCommand = /^\s*status\s*$/i.test(e.args) ? ({ kind: 'show' } as const) : parseCrewCommand(e.args)
@@ -210,7 +236,7 @@ export const register: Register = (on, options) => {
       if (crewCommand.kind === 'show') {
         await checkCrew(crewIo, openrouterKey)
         await registerCrew(crewIo)
-        return { text: `${describeCrew(crew(), router() !== null)}\n${describeHealth()}` }
+        return { text: `${describeCrew(crew(), router() !== null)}\n${describeHealth()}\n\n${describeStats()}` }
       }
       setCrewOverrides(applyCrewCommand(crewOverrides(), crewCommand))
       await $.store.set(CREW_KEY, crewOverrides()).catch((error) => $.ui.log(`[jev-pilot] crew not saved: ${String(error)}`))
@@ -236,7 +262,7 @@ export const register: Register = (on, options) => {
       const name = command.features[0] as keyof typeof FEATURE_INFO
       return { text: `jev-pilot: ${name} ${command.on ? 'on' : 'off'} (${FEATURE_INFO[name]}) · /jev ${name} ${command.on ? 'off' : 'on'} undoes it` }
     }
-    return { text: describeFeatures() }
+    return { text: `${describeFeatures()}\n\n${describeStats()}` }
   })
 
   // While a turn runs, the pilot shows what Claude is doing: thinking first.

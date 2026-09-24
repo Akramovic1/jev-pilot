@@ -175,6 +175,12 @@ uninstall() {
     claude plugin marketplace remove "$MARKETPLACE" >/dev/null && ok "removed the marketplace"
   fi
   if [[ -L "$BIN_DIR/claude-jev" ]]; then rm "$BIN_DIR/claude-jev"; ok "removed $BIN_DIR/claude-jev"; fi
+  # The custom-model router, if one is running. Sessions started with
+  # claude-jev talk to Claude through it: they need a restart (with claude).
+  if command -v curl >/dev/null 2>&1 && curl -fsS --max-time 1 -X POST "http://127.0.0.1:${JEV_ROUTER_PORT:-8799}/jev-router/stop" >/dev/null 2>&1; then
+    ok "stopped the custom-model router"
+    warn "Any claude-jev session still open can no longer reach Claude: close it and start 'claude' instead."
+  fi
   exit 0
 }
 [[ "${1:-}" == "--uninstall" ]] && uninstall

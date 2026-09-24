@@ -10,7 +10,7 @@
       "name": "jev-pilot",
       "source": "./",
       "description": "Jev decides the main conversation's reasoning effort (raised mid-turn when tool calls keep failing), each subagent's model, whether to split the work, and the one skill the prompt needs. Brings in custom OpenRouter models (a junior coder reviewed by Opus, or cheap bulk work) and Codex or OpenCode as reviewers, in modes you choose, each health-checked. Records every decision and suggests its own tuning. Needs CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 (Claude Code 2.1.278+).",
-      "version": "0.5.0",
+      "version": "0.6.0",
       "license": "MIT",
       "homepage": "https://github.com/Akramovic1/jev-pilot",
       "keywords": [
