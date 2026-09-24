@@ -235,6 +235,17 @@ jev-pilot can bring more workers into a Claude Code session than Claude alone:
 
 Outside these modes you can still ask for a review at any time: *"have Codex review this"*. Claude then spawns `jev-pilot:codex-review`.
 
+**Choose the reviewer's model.** Say it in your request, *"review this with Codex, Luna, high effort"*, or set a default that every session keeps:
+
+```
+/jev reviewer codex luna high          Codex reviews on Luna, high effort
+/jev reviewer codex effort xhigh       just the effort
+/jev reviewer opencode kimi-k3         an OpenCode model (checked against `opencode models`)
+/jev reviewer codex default            back to the CLI's own config
+```
+
+A Codex tier name (`astra`, `sol`, `terra`, `luna`) always means the **newest** model of that tier. jev-pilot reads Codex's model list at every session start, so when a newer Luna ships, reviews move to it with nothing to change. A full id such as `gpt-5.6-luna` pins that exact version. Efforts are checked against what the model takes. `/jev status` shows what each reviewer runs on now, e.g. `luna (newest, now gpt-5.6-luna) · effort high`.
+
 **Adding a model.** Pick a name, find a model on [OpenRouter's list of models that can call tools](https://openrouter.ai/models?supported_parameters=tools), and paste it after the name. The id, the page link or the model's name all work:
 
 ```

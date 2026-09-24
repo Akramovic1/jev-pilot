@@ -28,13 +28,13 @@ import {
   parseJevCommand,
   setFeature,
 } from './features.ts'
-import { applyCrewCommand, describeCrew, describeSlot, MAX_MODELS, MODELS_PAGE, parseCrewCommand, resolveModel, slotAlias, type CrewCommand } from './crew.ts'
+import { applyCrewCommand, describeChoice, describeCrew, describeSlot, MAX_MODELS, MODELS_PAGE, parseCrewCommand, resolveCodexChoice, resolveModel, resolveOpencodeChoice, slotAlias, type CrewCommand, type ReviewerResolved } from './crew.ts'
 import { resetBriefing } from './summary.ts'
 import { describeStats } from './session-stats.ts'
 import { entriesOf, LEDGER_KEY } from './ledger.ts'
 import { applied, currentTuning, describeTuning, proposals, setTuning, TUNING_KEY, tuningLoaded, tuningOf } from './tuning.ts'
-import { crew, crewOverrides, describeHealth, router, setCrewOverrides } from './crew-state.ts'
-import { CREW_KEY, checkCrew, checkSlot, ensureCrew, modelCatalog, publishSlots, registerCrew, type CrewIo } from './crew-run.ts'
+import { codexModels, crew, crewOverrides, describeHealth, router, setCrewOverrides } from './crew-state.ts'
+import { CREW_KEY, checkCrew, checkSlot, ensureCrew, modelCatalog, opencodeModels, publishSlots, refreshCodexModels, registerCrew, type CrewIo } from './crew-run.ts'
 import {
   type Act,
   ACT_LABEL,
@@ -233,16 +233,33 @@ export const register: Register = (on, options) => {
       }
       const openrouterKey = typeof options.openrouterApiKey === 'string' && options.openrouterApiKey ? options.openrouterApiKey : null
       await ensureCrew(crewIo, openrouterKey)
-      if (crewCommand.kind === 'unknown') return { text: `jev-pilot: unknown "${crewCommand.text}".\n${describeCrew(crew(), router() !== null)}` }
+      if (crewCommand.kind === 'unknown') return { text: `jev-pilot: unknown "${crewCommand.text}".\n${describeCrew(crew(), router() !== null, codexModels())}` }
       if (crewCommand.kind === 'show') {
         await checkCrew(crewIo, openrouterKey)
         await registerCrew(crewIo)
-        return { text: `${describeCrew(crew(), router() !== null)}\n${describeHealth()}\n\n${describeStats()}` }
+        return { text: `${describeCrew(crew(), router() !== null, codexModels())}\n${describeHealth()}\n\n${describeStats()}` }
       }
       if (crewCommand.kind === 'slot') return { text: describeSlot(crew(), crewCommand.slot, crewOverrides().recent ?? []) }
       // What was pasted, checked against OpenRouter's list before it's set.
       let change: CrewCommand = crewCommand
       let about: string | null = null
+      // A reviewer's model and effort, checked against the CLI's own list before it's set.
+      if (crewCommand.kind === 'reviewer-paste') {
+        const current = crew().reviewerChoices[crewCommand.reviewer] ?? {}
+        let resolved: ReviewerResolved
+        if (crewCommand.reviewer === 'codex') {
+          if (codexModels().length === 0) await refreshCodexModels(crewIo)
+          resolved = resolveCodexChoice(crewCommand.input, crewCommand.effort, codexModels(), current)
+        } else {
+          resolved = resolveOpencodeChoice(crewCommand.input, crewCommand.effort, crewCommand.input ? await opencodeModels(crewIo) : [], current)
+        }
+        if (!resolved.ok) {
+          const list = resolved.suggestions.length > 0 ? `\nAvailable:\n${resolved.suggestions.map((line) => `  ${line}`).join('\n')}` : ''
+          return { text: `The ${crewCommand.reviewer} reviewer is not changed: ${resolved.why}.${list}` }
+        }
+        change = { kind: 'reviewer-choice', reviewer: crewCommand.reviewer, choice: resolved.choice }
+        about = resolved.about || null
+      }
       if (crewCommand.kind === 'paste') {
         const resolved = resolveModel(crewCommand.input, await modelCatalog(crewIo))
         if (!resolved.ok) {
@@ -257,7 +274,7 @@ export const register: Register = (on, options) => {
         about = resolved.about
       }
       if (change.kind === 'model' && !change.model && !crew().slots.some((slot) => slot.name === change.slot)) {
-        return { text: `No custom model is called ${change.slot}.\n\n${describeCrew(crew(), router() !== null)}` }
+        return { text: `No custom model is called ${change.slot}.\n\n${describeCrew(crew(), router() !== null, codexModels())}` }
       }
       setCrewOverrides(applyCrewCommand(crewOverrides(), change))
       await $.store.set(CREW_KEY, crewOverrides()).catch((error) => $.ui.log(`[jev-pilot] crew not saved: ${String(error)}`))
@@ -273,13 +290,15 @@ export const register: Register = (on, options) => {
             ? `${change.slot} is now ${change.model}${about ? ` (${about})` : ''}. Saved for every session.\n` +
               `It's in /model from your next claude-jev session (press s there to use it for that session only). To use it as the main model right now: /model ${slotAlias(change.slot)}. That also makes it your default for new sessions, and /model default undoes that.\n\n`
             : `${change.slot} is removed, from every session and from /model.\n\n`
-          : ''
+          : change.kind === 'reviewer-choice'
+            ? `${change.reviewer} reviews now run on ${describeChoice(change.choice, codexModels())}${about ? ` (${about})` : ''}. Saved for every session. To use another model for one review, just say so ("review it with codex, luna, high").\n\n`
+            : ''
       // A mode that hands work to custom models, with none set: say how to set one.
       const unset =
         change.kind === 'mode' && (change.mode === 'budget' || change.mode === 'junior-lead') && crew().slots.length === 0
           ? `\n\nNo custom model is set yet, so this mode has nothing to hand work to. Add one from ${MODELS_PAGE}:\n  /jev <name you choose> <model>`
           : ''
-      return { text: `${headline}${describeCrew(crew(), router() !== null)}\n${describeHealth()}${unset}` }
+      return { text: `${headline}${describeCrew(crew(), router() !== null, codexModels())}\n${describeHealth()}${unset}` }
     }
     const command = parseJevCommand(e.args)
     if (command.kind === 'unknown') {

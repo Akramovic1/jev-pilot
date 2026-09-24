@@ -4,7 +4,7 @@
  * Shared, like features.ts: the router module routes with it, the pet module's
  * `/jev` changes and shows it.
  */
-import { crewOf, type Crew, type CrewOverrides, type Reviewer, type Slot } from './crew.ts'
+import { crewOf, type CodexModel, type Crew, type CrewOverrides, type Reviewer, type Slot } from './crew.ts'
 
 export type Health = { ok: boolean; detail: string; at: number }
 
@@ -13,6 +13,16 @@ let overrides: CrewOverrides = {}
 let routerUrl: string | null = null
 let started = false
 const health = new Map<string, Health>()
+// Codex's model list as it was last read (`codex debug models`): what a tier such as `luna` means now.
+let codexList: CodexModel[] = []
+
+export function codexModels(): CodexModel[] {
+  return codexList
+}
+
+export function setCodexModels(list: CodexModel[]): void {
+  codexList = [...list]
+}
 
 export function initCrew(from: Record<string, unknown>): void {
   options = { ...from }

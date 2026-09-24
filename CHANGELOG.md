@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8.2 — 2026-09-24
+
+**Choose the model Codex and OpenCode review with.**
+
+- **In your own words:** *"review this with Codex, Luna, high effort"*. Claude puts the model in the reviewer's brief, and the reviewer runs Codex with `-m` and the reasoning effort (OpenCode: `-m` and `--variant`).
+- **As a default:** `/jev reviewer codex luna high`, `/jev reviewer codex effort xhigh`, `/jev reviewer opencode <model>`, `/jev reviewer codex default`. Checked before saving: Codex models against `codex debug models` (with each model's own efforts), OpenCode models against `opencode models`. Kept in `models.json`, so every session and every install uses it.
+- **Always the newest of a tier.** A Codex tier name (`astra`, `sol`, `terra`, `luna`) is kept as the tier, and each session uses its newest model from Codex's current list. Today `luna` is `gpt-5.6-luna`; a later Luna is taken up by itself. A full id pins that version.
+- The model and effort are passed to the CLI as quoted arguments, never pasted into the command as text. `/jev status` shows what each reviewer runs on.
+
 ## 0.8.1 — 2026-09-24
 
 A security and reliability release, from an independent review (Codex) of everything since 0.5.0.

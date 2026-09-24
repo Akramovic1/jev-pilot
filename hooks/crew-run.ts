@@ -5,8 +5,8 @@
  * the hook. Checks are cheap: a 1-token call per custom model on OpenRouter,
  * `codex login status`, `opencode --version` and `opencode auth list`.
  */
-import { aboutModel, juniorSlot, juniorSpec, overridesOf, pickerSettings, recordedModels, REVIEWERS, reviewerSpec, routerTable, slotAlias, type AgentSpec, type OpenRouterModel } from './crew.ts'
-import { codexVerdict, crew, crewOverrides, crewStarted, markCrewStarted, opencodeVerdict, reviewerHealthy, router, setCrewOverrides, setHealth, setRouter } from './crew-state.ts'
+import { aboutModel, codexCatalog, juniorSlot, juniorSpec, overridesOf, pickerSettings, resolvedChoice, recordedModels, REVIEWERS, reviewerSpec, routerTable, slotAlias, type AgentSpec, type OpenRouterModel } from './crew.ts'
+import { codexModels, codexVerdict, crew, crewOverrides, crewStarted, setCodexModels, markCrewStarted, opencodeVerdict, reviewerHealthy, router, setCrewOverrides, setHealth, setRouter } from './crew-state.ts'
 
 export interface CrewIo {
   fetch: (url: string, init: { method?: string; headers?: Record<string, string>; body?: string }) => Promise<{ ok: boolean; status: number; text: string }>
@@ -103,6 +103,8 @@ export async function checkAgents(io: CrewIo): Promise<void> {
     const codex = await io.run(['codex', 'login', 'status'], 15_000)
     const verdict = codexVerdict(codex.exitCode, `${codex.stdout}\n${codex.stderr}`)
     setHealth('agent:codex', { ...verdict, at: Date.now() })
+    // Its models now: what a tier such as `luna` resolves to this session.
+    if (verdict.ok) await refreshCodexModels(io)
   } catch {
     setHealth('agent:codex', { ok: false, detail: 'codex not installed', at: Date.now() })
   }
@@ -113,6 +115,23 @@ export async function checkAgents(io: CrewIo): Promise<void> {
   } catch {
     setHealth('agent:opencode', { ok: false, detail: 'opencode not installed', at: Date.now() })
   }
+}
+
+/** Reads Codex's model list (`codex debug models`); kept as it was when it can't be read. */
+export async function refreshCodexModels(io: CrewIo): Promise<void> {
+  const listed = await io.run(['codex', 'debug', 'models'], 15_000).catch(() => null)
+  const models = listed && listed.exitCode === 0 ? codexCatalog(listed.stdout) : []
+  if (models.length > 0) setCodexModels(models)
+}
+
+/** OpenCode's models (`opencode models`), one provider/model id per line; [] when it can't be read. */
+export async function opencodeModels(io: CrewIo): Promise<string[]> {
+  const listed = await io.run(['opencode', 'models'], 30_000).catch(() => null)
+  if (!listed || listed.exitCode !== 0) return []
+  return listed.stdout
+    .split('\n')
+    .map((line) => line.replace(/\x1b\[[0-9;]*m/g, '').trim())
+    .filter((line) => /^[\w.:~-]+\/[\w.:~\/-]+$/.test(line))
 }
 
 /** The router still answering, and any custom model it had to hand to Claude. */
@@ -175,7 +194,11 @@ export const REVIEWER_MODEL = 'haiku'
  */
 export async function registerCrew(io: CrewIo): Promise<void> {
   const junior = juniorSlot(crew(), router() !== null)
-  const specs = [...(junior ? [juniorSpec(slotAlias(junior.name))] : []), ...REVIEWERS.filter(reviewerHealthy).map((r) => reviewerSpec(r, REVIEWER_MODEL))]
+  const specs = [
+    ...(junior ? [juniorSpec(slotAlias(junior.name))] : []),
+    // Each reviewer on its chosen model, a tier resolved to its newest now.
+    ...REVIEWERS.filter(reviewerHealthy).map((r) => reviewerSpec(r, REVIEWER_MODEL, resolvedChoice(r, crew().reviewerChoices[r], codexModels()), codexModels())),
+  ]
   for (const spec of specs) await io.register(spec).catch(() => undefined)
 }
 
@@ -209,7 +232,7 @@ export async function refreshModels(io: CrewIo, key: string | null): Promise<voi
   const current = crewOverrides()
   const before = crew().slots
   const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
-  if (same(recorded.models, current.models) && same(recorded.recent, current.recent) && same(recorded.about, current.about)) return
+  if (same(recorded.models, current.models) && same(recorded.recent, current.recent) && same(recorded.about, current.about) && same(recorded.reviewerChoices, current.reviewerChoices)) return
   setCrewOverrides({ ...current, ...recorded })
   for (const slot of crew().slots) {
     if (!before.some((b) => b.name === slot.name && b.model === slot.model)) void checkSlot(io, key, slot.name, slot.model).catch(() => undefined)

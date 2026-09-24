@@ -170,10 +170,10 @@ test('the junior writes code on its slot; a reviewer only relays, with Bash alon
 
 test('reviews run read-only: Codex in its read-only sandbox, OpenCode as its plan agent', () => {
   const codex = reviewerSpec('codex', 'haiku').prompt
-  expect(codex).toContain('codex exec -s read-only')
+  expect(codex).toContain('codex exec "$@" -s read-only')
   expect(codex).not.toMatch(/workspace-write|danger-full-access|--dangerously/)
   const opencode = reviewerSpec('opencode', 'haiku').prompt
-  expect(opencode).toContain('opencode run --agent plan')
+  expect(opencode).toContain('opencode run "$@" --agent plan')
   expect(opencode).not.toContain('--auto')
   // The brief goes in through a quoted heredoc, so nothing in it runs in the shell.
   for (const prompt of [codex, opencode]) expect(prompt).toContain("<<'JEV_BRIEF'")
@@ -363,13 +363,13 @@ test('each model set is remembered, newest first, so switching back is one comma
 test('models.json is read back as the models set, whatever else the file holds', async () => {
   const { recordedModels } = await import('../hooks/crew.ts')
   const text = JSON.stringify({ slots: { flash: { model: 'deepseek/deepseek-v4.1-flash', about: 'DeepSeek V4.1 Flash' }, old: { model: '' }, bad: { model: 'rm -rf /' }, 'NOT OK': { model: 'a/b' } }, recent: ['deepseek/deepseek-v4.1-flash'] })
-  expect(recordedModels(text)).toEqual({ models: { flash: 'deepseek/deepseek-v4.1-flash', old: '' }, recent: ['deepseek/deepseek-v4.1-flash'], about: { 'deepseek/deepseek-v4.1-flash': 'DeepSeek V4.1 Flash' } })
+  expect(recordedModels(text)).toEqual({ models: { flash: 'deepseek/deepseek-v4.1-flash', old: '' }, recent: ['deepseek/deepseek-v4.1-flash'], about: { 'deepseek/deepseek-v4.1-flash': 'DeepSeek V4.1 Flash' }, reviewerChoices: {} })
   expect(recordedModels(null)).toBeNull()
   expect(recordedModels('not json')).toBeNull()
   expect(recordedModels('{"other": 1}')).toBeNull()
   // What one session writes, the next reads back unchanged.
   const set = { models: { coder: 'qwen/qwen3-coder' }, recent: ['qwen/qwen3-coder'] }
-  expect(recordedModels(routerTable(crewOf({}, set), set))).toEqual({ models: { coder: 'qwen/qwen3-coder' }, recent: ['qwen/qwen3-coder'] })
+  expect(recordedModels(routerTable(crewOf({}, set), set))).toEqual({ models: { coder: 'qwen/qwen3-coder' }, recent: ['qwen/qwen3-coder'], reviewerChoices: {} })
 })
 
 test('a session starts with the models recorded in models.json, over its own store; the mode stays its own', async () => {
@@ -566,7 +566,7 @@ test('a record written elsewhere with too many models: the first eight count', (
 test('commands with a fixed number of words refuse extra ones', () => {
   expect(parseCrewCommand('mode quality garbage')?.kind).toBe('unknown')
   expect(parseCrewCommand('junior flash garbage')?.kind).toBe('unknown')
-  expect(parseCrewCommand('reviewer codex garbage')?.kind).toBe('unknown')
+  expect(parseCrewCommand('reviewer codex luna high extra')?.kind).toBe('unknown')
   expect(parseCrewCommand('models extra')?.kind).toBe('unknown')
   expect(parseCrewCommand('remove flash extra')?.kind).toBe('unknown')
   expect(parseCrewCommand('mode quality')).toEqual({ kind: 'mode', mode: 'quality' })
@@ -582,4 +582,90 @@ test('the router takes a models table only when it is one; anything else leaves 
   for (const bad of [[], 'x', null, { flash: 'deepseek/x' }, { flash: { model: 'not an id' } }, { 'Bad Name': { model: 'a/b' } }, Object.fromEntries(Array.from({ length: 65 }, (_, i) => [`m${i}`, { model: 'a/b' }]))]) {
     expect(validTable(bad)).toBeNull()
   }
+})
+
+// ---- the reviewers' models: Codex tiers, always the newest ------------------------------
+
+const codexList = JSON.stringify([
+  { slug: 'gpt-6-astra', display_name: 'GPT-6-Astra', description: 'Frontier', visibility: 'list', supported_reasoning_levels: [{ effort: 'low' }, { effort: 'high' }, { effort: 'ultra' }] },
+  { slug: 'gpt-5.6-sol', display_name: 'GPT-5.6-Sol', description: 'Complex work', visibility: 'list', supported_reasoning_levels: [{ effort: 'low' }, { effort: 'high' }] },
+  { slug: 'gpt-5.6-luna', display_name: 'GPT-5.6-Luna', description: 'Fast', visibility: 'list', supported_reasoning_levels: [{ effort: 'low' }, { effort: 'medium' }, { effort: 'high' }] },
+  { slug: 'codex-auto-review', display_name: 'Auto', description: 'hidden', visibility: 'hide', supported_reasoning_levels: [] },
+])
+
+test("Codex's list is read as it shows it: hidden models left out, each with its efforts", async () => {
+  const { codexCatalog } = await import('../hooks/crew.ts')
+  const list = codexCatalog(codexList)
+  expect(list.map((m) => m.slug)).toEqual(['gpt-6-astra', 'gpt-5.6-sol', 'gpt-5.6-luna'])
+  expect(list[2]?.efforts).toEqual(['low', 'medium', 'high'])
+  expect(codexCatalog(JSON.stringify({ models: JSON.parse(codexList) })).length).toBe(3)
+  expect(codexCatalog('not json')).toEqual([])
+})
+
+test('"luna" is kept as the tier and runs on its newest model; a GPT-7 Luna is taken up by itself', async () => {
+  const { codexCatalog, resolveCodexChoice, resolvedChoice, describeChoice } = await import('../hooks/crew.ts')
+  const today = codexCatalog(codexList)
+  expect(resolveCodexChoice('luna', 'high', today)).toMatchObject({ ok: true, choice: { model: 'luna', effort: 'high' } })
+  expect(resolvedChoice('codex', { model: 'luna', effort: 'high' }, today)).toEqual({ model: 'gpt-5.6-luna', effort: 'high' })
+  const later = codexCatalog(
+    JSON.stringify([
+      ...JSON.parse(codexList),
+      { slug: 'gpt-7-luna', display_name: 'GPT-7-Luna', description: 'Newer', visibility: 'list', supported_reasoning_levels: [{ effort: 'high' }] },
+      { slug: 'gpt-6.10-luna', display_name: 'GPT-6.10-Luna', description: 'Between', visibility: 'list', supported_reasoning_levels: [] },
+    ]),
+  )
+  expect(resolvedChoice('codex', { model: 'luna' }, later)).toEqual({ model: 'gpt-7-luna' })
+  expect(describeChoice({ model: 'luna', effort: 'high' }, today)).toBe('luna (newest, now gpt-5.6-luna) · effort high')
+})
+
+test('an exact id pins that model; an unknown name or an effort the model lacks is refused with what is there', async () => {
+  const { codexCatalog, resolveCodexChoice, resolvedChoice } = await import('../hooks/crew.ts')
+  const today = codexCatalog(codexList)
+  expect(resolveCodexChoice('gpt-5.6-sol', undefined, today)).toMatchObject({ ok: true, choice: { model: 'gpt-5.6-sol' } })
+  expect(resolveCodexChoice('GPT-6-Astra', 'ultra', today)).toMatchObject({ ok: true, choice: { model: 'gpt-6-astra', effort: 'ultra' } })
+  expect(resolvedChoice('codex', { model: 'gpt-5.6-sol' }, today)).toEqual({ model: 'gpt-5.6-sol' })
+  const unknown = resolveCodexChoice('nova', undefined, today)
+  expect(unknown.ok).toBe(false)
+  expect(!unknown.ok && unknown.suggestions.join('\n')).toContain('luna (now gpt-5.6-luna)')
+  const effort = resolveCodexChoice('luna', 'ultra', today)
+  expect(!effort.ok && effort.suggestions).toEqual(['low', 'medium', 'high'])
+  // The effort alone keeps the model chosen before.
+  expect(resolveCodexChoice('', 'low', today, { model: 'sol' })).toMatchObject({ ok: true, choice: { model: 'sol', effort: 'low' } })
+})
+
+test('OpenCode: the full id, or a model name only one provider has', async () => {
+  const { resolveOpencodeChoice } = await import('../hooks/crew.ts')
+  const models = ['fireworks/kimi-k3', 'openai/gpt-5.6-sol', 'github-copilot/gpt-5.6-sol']
+  expect(resolveOpencodeChoice('kimi-k3', 'high', models)).toMatchObject({ ok: true, choice: { model: 'fireworks/kimi-k3', effort: 'high' } })
+  expect(resolveOpencodeChoice('openai/gpt-5.6-sol', undefined, models)).toMatchObject({ ok: true, choice: { model: 'openai/gpt-5.6-sol' } })
+  const two = resolveOpencodeChoice('gpt-5.6-sol', undefined, models)
+  expect(!two.ok && two.why).toContain('more than one provider')
+  expect(resolveOpencodeChoice('nope', undefined, models).ok).toBe(false)
+})
+
+test('the chosen model reaches the CLI as quoted flags, and a hostile value stays one quoted word', async () => {
+  const { reviewerArgs, reviewerSpec, codexCatalog } = await import('../hooks/crew.ts')
+  expect(reviewerArgs('codex', {})).toBe('set --')
+  expect(reviewerArgs('codex', { model: 'gpt-5.6-luna', effort: 'high' })).toBe(`set -- -m 'gpt-5.6-luna' -c 'model_reasoning_effort="high"'`)
+  expect(reviewerArgs('opencode', { model: 'fireworks/kimi-k3', effort: 'high' })).toBe(`set -- -m 'fireworks/kimi-k3' --variant 'high'`)
+  // Run through a real shell: the value comes back as one argument, nothing executed.
+  const hostile = "x'; echo pwned; '"
+  // @ts-expect-error: Bun's own global (the typecheck here has no Bun types)
+  const out = Bun.spawnSync(['bash', '-c', `${reviewerArgs('codex', { model: hostile })}; printf '%s|' "$@"`]).stdout.toString()
+  expect(out).toBe(`-m|${hostile}|`)
+  const prompt = reviewerSpec('codex', 'haiku', { model: 'gpt-5.6-luna' }, codexCatalog(codexList)).prompt
+  expect(prompt).toContain("set -- -m 'gpt-5.6-luna'")
+  expect(prompt).toContain("luna = -m 'gpt-5.6-luna'")
+  expect(prompt).toContain("astra = -m 'gpt-6-astra'")
+})
+
+test('reviewer choices: set, kept in the record for every session, and back to the CLI default', () => {
+  expect(parseCrewCommand('reviewer codex luna high')).toEqual({ kind: 'reviewer-paste', reviewer: 'codex', input: 'luna', effort: 'high' })
+  expect(parseCrewCommand('reviewer codex effort xhigh')).toEqual({ kind: 'reviewer-paste', reviewer: 'codex', input: '', effort: 'xhigh' })
+  expect(parseCrewCommand('reviewer opencode default')).toEqual({ kind: 'reviewer-choice', reviewer: 'opencode', choice: {} })
+  let overrides = applyCrewCommand({}, { kind: 'reviewer-choice', reviewer: 'codex', choice: { model: 'luna', effort: 'high' } })
+  expect(JSON.parse(routerTable(crewOf({}, overrides), overrides)).reviewers).toEqual({ codex: { model: 'luna', effort: 'high' } })
+  expect(crewOf({}, overridesOf({ reviewerChoices: { codex: { model: 'luna; rm', effort: 'high' } } })).reviewerChoices).toEqual({ codex: { effort: 'high' } })
+  overrides = applyCrewCommand(overrides, { kind: 'reviewer-choice', reviewer: 'codex', choice: {} })
+  expect(overrides.reviewerChoices).toEqual({})
 })
