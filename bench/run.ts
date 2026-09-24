@@ -54,11 +54,14 @@ if (setups.includes('junior') && !(await routerUp())) {
 const slotModels: Record<string, string> = (() => {
   try {
     const table = JSON.parse(readFileSync(join(home, '.claude/jev-pilot/models.json'), 'utf8')).slots ?? {}
-    return Object.fromEntries(Object.entries(table).map(([name, slot]: [string, any]) => [`jev-${name}`, slot.model]))
+    return Object.fromEntries(Object.entries(table).filter(([, slot]: [string, any]) => slot?.model).map(([name, slot]: [string, any]) => [`jev-${name}`, slot.model]))
   } catch {
     return {}
   }
 })()
+if (setups.includes('junior') && !slotModels['jev-alpha']) {
+  throw new Error('the junior setup runs the junior on the alpha slot: set a model first (/jev alpha <model> in a claude-jev session)')
+}
 const prices: Record<string, { prompt: number; completion: number }> = {}
 if (setups.includes('junior')) {
   const list = await fetch('https://openrouter.ai/api/v1/models').then((r) => r.json() as Promise<{ data: any[] }>)

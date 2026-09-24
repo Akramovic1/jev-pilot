@@ -163,7 +163,7 @@ const server = createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost')
     if (url.pathname === '/jev-router/health') {
       res.writeHead(200, { 'content-type': 'application/json' })
-      return res.end(JSON.stringify({ ok: true, version: ROUTER_VERSION, pid: process.pid, slots: Object.keys(currentSlots()), upstream: UPSTREAM, fallbacks }))
+      return res.end(JSON.stringify({ ok: true, version: ROUTER_VERSION, pid: process.pid, slots: Object.entries(currentSlots()).filter(([, slot]) => slot && slot.model).map(([name]) => name), upstream: UPSTREAM, fallbacks }))
     }
     // `claude-jev` stopping a router of another version: it exits cleanly,
     // and its supervisor with it.

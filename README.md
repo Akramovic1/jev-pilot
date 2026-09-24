@@ -220,7 +220,7 @@ Switches are remembered across sessions. `/jev skills off` leaves skills exactly
 
 jev-pilot can bring more workers into a Claude Code session than Claude alone:
 
-- **Custom models:** three slots, `alpha`, `beta` and `gamma`, each holding any [OpenRouter model](https://openrouter.ai/models). `alpha` starts as `deepseek/deepseek-v4.1-flash`; `beta` and `gamma` start empty.
+- **Custom models:** three slots, `alpha`, `beta` and `gamma`, each holding any [OpenRouter model](https://openrouter.ai/models?supported_parameters=tools) you choose. None is set until you set it.
 - **Codex and OpenCode:** your own `codex` and `opencode` CLIs, with your own logins, as code reviewers. They run as themselves, not through OpenRouter.
 
 **You choose how they're used** with a mode. Within that mode, Jev decides task by task.
@@ -235,16 +235,29 @@ jev-pilot can bring more workers into a Claude Code session than Claude alone:
 
 Outside these modes you can still ask for a review at any time: *"have Codex review this"*. Claude then spawns `jev-pilot:codex-review`.
 
+**Setting a model.** Find one on [OpenRouter's list of models that can call tools](https://openrouter.ai/models?supported_parameters=tools) and paste it after the slot's name. The id, the page link or the name all work:
+
 ```
+/jev alpha deepseek/deepseek-v4.1-flash
+/jev alpha https://openrouter.ai/deepseek/deepseek-v4.1-flash
+/jev alpha DeepSeek: DeepSeek V4.1 Flash
+```
+
+jev-pilot looks it up in OpenRouter's live list, then sets it and says what it is: `alpha is now deepseek/deepseek-v4.1-flash (DeepSeek: DeepSeek V4.1 Flash · 1M context · $0.14 in · $0.42 out per million tokens)`. It then checks the model answers.
+- **Refused:** a model OpenRouter doesn't have gets the three closest ones to try instead. So does one that can't call tools, since a subagent works through tools.
+- **Kept for every session:** the choice is recorded in `~/.claude/jev-pilot/models.json`, which every session reads, in any project and whichever way jev-pilot is installed. A session that's already open takes up the change at its next prompt.
+
+```
+/jev alpha                           the slot: its model, and the models you set before (to switch back)
+/jev beta <model>                    set a slot (gamma likewise); a new paste replaces the old model
+/jev beta off                        empty a slot
 /jev status                          the mode, the slots, and a health check of every worker
 /jev mode junior-lead                standard · budget · junior-lead · second-opinion · quality
-/jev alpha qwen/qwen3-coder          put any OpenRouter model in a slot (beta, gamma likewise)
-/jev beta off                        empty a slot
 /jev junior beta                     which slot the junior runs on
 /jev reviewer opencode               which agent reviews: codex or opencode
 ```
 
-Changes apply from the next turn and are remembered across sessions.
+Changes apply from the next turn. The modes that use custom models (`budget`, `junior-lead`) say so when no slot is set yet.
 
 **Every worker is checked** when the session starts and on `/jev status`:
 
@@ -355,7 +368,7 @@ Every option has a sensible default. On a marketplace install, change options wi
 | `suggestSkills` | true | pick one skill per prompt; off leaves skills as Claude Code handles them |
 | `logDecisions` | true | master switch for jev-pilot's messages in the conversation (errors always show) |
 | `mode` | `standard` | how the [crew](#-the-crew-custom-models-and-other-agents) is used: `standard`, `budget`, `junior-lead`, `second-opinion`, `quality` |
-| `alphaModel` / `betaModel` / `gammaModel` | `deepseek/deepseek-v4.1-flash` / — / — | the custom model slots: any OpenRouter model id |
+| `alphaModel` / `betaModel` / `gammaModel` | not set | the custom model slots as settings; `/jev <slot> <model>` is easier and wins over these |
 | `alphaWhen` / `betaWhen` / `gammaWhen` | bulk work with nothing to judge | when Jev should choose that slot, in plain words |
 | `junior` / `reviewer` | `alpha` / `codex` | the junior's slot, and the external reviewer (`codex` or `opencode`) |
 

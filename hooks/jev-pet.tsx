@@ -28,13 +28,13 @@ import {
   parseJevCommand,
   setFeature,
 } from './features.ts'
-import { applyCrewCommand, describeCrew, parseCrewCommand } from './crew.ts'
+import { applyCrewCommand, describeCrew, describeSlot, MODELS_PAGE, parseCrewCommand, resolveModel, type CrewCommand } from './crew.ts'
 import { resetBriefing } from './summary.ts'
 import { describeStats } from './session-stats.ts'
 import { entriesOf, LEDGER_KEY } from './ledger.ts'
 import { applied, currentTuning, describeTuning, proposals, setTuning, TUNING_KEY, tuningLoaded, tuningOf } from './tuning.ts'
 import { crew, crewOverrides, describeHealth, router, setCrewOverrides } from './crew-state.ts'
-import { CREW_KEY, checkCrew, checkSlot, ensureCrew, publishSlots, registerCrew, type CrewIo } from './crew-run.ts'
+import { CREW_KEY, checkCrew, checkSlot, ensureCrew, modelCatalog, publishSlots, registerCrew, type CrewIo } from './crew-run.ts'
 import {
   type Act,
   ACT_LABEL,
@@ -200,16 +200,16 @@ export const register: Register = (on, options) => {
       if (action === 'reset') {
         setTuning({ values: {}, since: Date.now() })
         await $.store.delete(TUNING_KEY).catch(() => undefined)
-        return { text: `jev-pilot: tuning cleared; back to your settings.\n\n${describeTuning(entries)}` }
+        return { text: `tuning cleared; back to your settings.\n\n${describeTuning(entries)}` }
       }
       if (action === 'apply') {
         const found = proposals(entries)
-        if (found.length === 0) return { text: `jev-pilot: nothing to apply.\n\n${describeTuning(entries)}` }
+        if (found.length === 0) return { text: `nothing to apply.\n\n${describeTuning(entries)}` }
         const next = applied(currentTuning(), found, Date.now())
         setTuning(next)
         await $.store.set(TUNING_KEY, next).catch((error) => $.ui.log(`[jev-pilot] tuning not saved: ${String(error)}`))
         return {
-          text: `jev-pilot: applied ${found.map((f) => `${f.option} ${f.from} → ${f.to}`).join(', ')}. The next suggestion waits for 20 new turns.\n\n${describeTuning(entries)}`,
+          text: `applied ${found.map((f) => `${f.option} ${f.from} → ${f.to}`).join(', ')}. The next suggestion waits for 20 new turns.\n\n${describeTuning(entries)}`,
         }
       }
       return { text: describeTuning(entries) }
@@ -223,6 +223,7 @@ export const register: Register = (on, options) => {
         home: () => $.env.get('HOME'),
         routerUrl: () => $.env.get('JEV_ROUTER_URL'),
         write: (path, text) => $.fs.write(path, text),
+        read: async (path) => ((await $.fs.exists(path)) ? $.fs.read(path) : null),
         run: (argv, timeoutMs) => $.process.run(argv, { timeoutMs }),
         storeGet: (key) => $.store.get(key),
         sleep: (ms) => $.clock.sleep(ms),
@@ -238,15 +239,39 @@ export const register: Register = (on, options) => {
         await registerCrew(crewIo)
         return { text: `${describeCrew(crew(), router() !== null)}\n${describeHealth()}\n\n${describeStats()}` }
       }
-      setCrewOverrides(applyCrewCommand(crewOverrides(), crewCommand))
+      if (crewCommand.kind === 'slot') return { text: describeSlot(crew(), crewCommand.slot, crewOverrides().recent ?? []) }
+      // What was pasted, checked against OpenRouter's list before it's set.
+      let change: CrewCommand = crewCommand
+      let about: string | null = null
+      if (crewCommand.kind === 'paste') {
+        const resolved = resolveModel(crewCommand.input, await modelCatalog(crewIo))
+        if (!resolved.ok) {
+          const tries = resolved.suggestions.length > 0 ? `\nDid you mean:\n${resolved.suggestions.map((id) => `  /jev ${crewCommand.slot} ${id}`).join('\n')}` : ''
+          return { text: `${crewCommand.slot} not changed: ${resolved.why}.${tries}\nFind one at ${MODELS_PAGE} and paste its id, link or name.` }
+        }
+        change = { kind: 'model', slot: crewCommand.slot, model: resolved.id }
+        about = resolved.about
+      }
+      setCrewOverrides(applyCrewCommand(crewOverrides(), change))
       await $.store.set(CREW_KEY, crewOverrides()).catch((error) => $.ui.log(`[jev-pilot] crew not saved: ${String(error)}`))
       await publishSlots(crewIo).catch((error) => $.ui.log(`[jev-pilot] custom models not published: ${String(error)}`))
-      if (crewCommand.kind === 'model' && crewCommand.model) await checkSlot(crewIo, openrouterKey, crewCommand.slot, crewCommand.model)
+      if (change.kind === 'model' && change.model) await checkSlot(crewIo, openrouterKey, change.slot, change.model)
       // A new junior, say: its agent type from the next turn, and the model
       // told about the change with its next prompt.
       await registerCrew(crewIo)
       resetBriefing()
-      return { text: `${describeCrew(crew(), router() !== null)}\n${describeHealth()}` }
+      const headline =
+        change.kind === 'model'
+          ? change.model
+            ? `${change.slot} is now ${change.model}${about ? ` (${about})` : ''}. Saved: every session uses it until you change it.\n\n`
+            : `${change.slot} is off.\n\n`
+          : ''
+      // A mode that hands work to custom models, with none set: say how to set one.
+      const unset =
+        change.kind === 'mode' && (change.mode === 'budget' || change.mode === 'junior-lead') && crew().slots.length === 0
+          ? `\n\nNo custom model is set yet, so this mode has nothing to hand work to. Paste one from ${MODELS_PAGE}:\n  /jev alpha <model>`
+          : ''
+      return { text: `${headline}${describeCrew(crew(), router() !== null)}\n${describeHealth()}${unset}` }
     }
     const command = parseJevCommand(e.args)
     if (command.kind === 'unknown') {

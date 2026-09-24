@@ -45,8 +45,13 @@ export type SlotName = (typeof SLOT_NAMES)[number]
 export const DEFAULT_SLOT_WHEN =
   'Choose for bulk work with nothing to judge, where cost matters more than precision: searching or reading across many files and reporting what is there, summarizing, listing, filling in boilerplate from an existing pattern.'
 
+/**
+ * No slot has a model until you give it one: `/jev alpha <model>`, pasting
+ * the model's id, page link or name from openrouter.ai/models. What you set
+ * is kept in the plugin's store, so every session uses it.
+ */
 export const DEFAULT_SLOTS: Record<SlotName, { model: string; when: string }> = {
-  alpha: { model: 'deepseek/deepseek-v4.1-flash', when: DEFAULT_SLOT_WHEN },
+  alpha: { model: '', when: DEFAULT_SLOT_WHEN },
   beta: { model: '', when: DEFAULT_SLOT_WHEN },
   gamma: { model: '', when: DEFAULT_SLOT_WHEN },
 }
@@ -63,7 +68,12 @@ export interface CrewOverrides {
   models?: Partial<Record<SlotName, string>>
   junior?: SlotName
   reviewer?: Reviewer
+  /** The models set before, newest first, so switching back is one command. */
+  recent?: string[]
 }
+
+/** How many models `/jev <slot>` remembers. */
+export const RECENT_MODELS = 5
 
 export interface Crew {
   mode: Mode
@@ -100,6 +110,9 @@ export function overridesOf(stored: unknown): CrewOverrides {
   if (typeof raw.mode === 'string' && MODES.includes(raw.mode as Mode)) out.mode = raw.mode as Mode
   if (typeof raw.junior === 'string' && SLOT_NAMES.includes(raw.junior as SlotName)) out.junior = raw.junior as SlotName
   if (typeof raw.reviewer === 'string' && REVIEWERS.includes(raw.reviewer as Reviewer)) out.reviewer = raw.reviewer as Reviewer
+  if (Array.isArray(raw.recent)) {
+    out.recent = raw.recent.filter((id): id is string => typeof id === 'string' && MODEL_ID.test(id)).slice(0, RECENT_MODELS)
+  }
   if (raw.models && typeof raw.models === 'object' && !Array.isArray(raw.models)) {
     const models: Partial<Record<SlotName, string>> = {}
     for (const name of SLOT_NAMES) {
@@ -111,9 +124,38 @@ export function overridesOf(stored: unknown): CrewOverrides {
   return out
 }
 
-/** The router's table, written to ~/.claude/jev-pilot/models.json. */
-export function routerTable(crew: Crew): string {
-  return JSON.stringify({ slots: Object.fromEntries(crew.slots.map((slot) => [slot.name, { model: slot.model }])) }, null, 2)
+/**
+ * ~/.claude/jev-pilot/models.json: the router's table, and the record of
+ * what you set. Every slot is written, an unset one as "", with the models
+ * set before, so every session (any project, any install of jev-pilot)
+ * reads the same choice back.
+ */
+export function routerTable(crew: Crew, recent: readonly string[] = []): string {
+  const slots = Object.fromEntries(SLOT_NAMES.map((name) => [name, { model: crew.slots.find((slot) => slot.name === name)?.model ?? '' }]))
+  return JSON.stringify({ slots, recent: recent.slice(0, RECENT_MODELS) }, null, 2)
+}
+
+/**
+ * The slot models and recent models recorded in models.json, as overrides;
+ * null when the file isn't one (missing, or not jev-pilot's).
+ */
+export function recordedModels(fileText: string | null): Pick<CrewOverrides, 'models' | 'recent'> | null {
+  if (!fileText) return null
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(fileText)
+  } catch {
+    return null
+  }
+  const slots = (parsed as { slots?: unknown })?.slots
+  if (!slots || typeof slots !== 'object' || Array.isArray(slots)) return null
+  const models: Partial<Record<SlotName, string>> = {}
+  for (const name of SLOT_NAMES) {
+    const model = (slots as Record<string, { model?: unknown } | undefined>)[name]?.model
+    if (typeof model === 'string' && (model === '' || MODEL_ID.test(model))) models[name] = model
+  }
+  const recent = overridesOf({ recent: (parsed as { recent?: unknown }).recent }).recent
+  return { models, ...(recent ? { recent } : {}) }
 }
 
 /**
@@ -139,7 +181,12 @@ export function reviews(crew: Crew): boolean {
 export type CrewCommand =
   | { kind: 'show' }
   | { kind: 'mode'; mode: Mode }
+  /** `model` is the resolved id ('' turns the slot off). */
   | { kind: 'model'; slot: SlotName; model: string }
+  /** `/jev alpha <what you pasted>`: resolved against OpenRouter's list before it's set. */
+  | { kind: 'paste'; slot: SlotName; input: string }
+  /** `/jev alpha`: the slot, its model, and the ones set before. */
+  | { kind: 'slot'; slot: SlotName }
   | { kind: 'junior'; slot: SlotName }
   | { kind: 'reviewer'; reviewer: Reviewer }
   | { kind: 'unknown'; text: string }
@@ -148,7 +195,9 @@ export type CrewCommand =
  * `/jev` arguments about the crew, or null when they're about something else:
  *   models                      the crew: mode, slots, junior, reviewer
  *   mode <name>                 standard · budget · junior-lead · second-opinion · quality
- *   alpha <openrouter model>    a slot's model (beta, gamma likewise); `off` clears it
+ *   alpha                       the slot: its model, and the ones set before
+ *   alpha <openrouter model>    a slot's model (beta, gamma likewise), pasted as its id,
+ *                               page link or name; `off` clears it
  *   junior <slot>               which slot the junior runs on
  *   reviewer <codex|opencode>   which external agent reviews
  */
@@ -160,12 +209,12 @@ export function parseCrewCommand(args: string): CrewCommand | null {
     const mode = words[1]?.toLowerCase() as Mode | undefined
     return mode && MODES.includes(mode) ? { kind: 'mode', mode } : { kind: 'unknown', text: `mode ${words[1] ?? ''}`.trim() }
   }
-  if (head && SLOT_NAMES.includes(head as SlotName) && words.length === 2) {
-    const value = words[1] as string
-    if (value.toLowerCase() === 'off') return { kind: 'model', slot: head as SlotName, model: '' }
-    // An OpenRouter id: provider/model, optionally with a :variant or a ~ alias.
-    if (/^~?[\w.-]+\/[\w.:-]+$/.test(value)) return { kind: 'model', slot: head as SlotName, model: value }
-    return { kind: 'unknown', text: args.trim() }
+  if (head && SLOT_NAMES.includes(head as SlotName)) {
+    const slot = head as SlotName
+    const input = args.trim().slice(head.length).trim()
+    if (!input) return { kind: 'slot', slot }
+    if (input.toLowerCase() === 'off') return { kind: 'model', slot, model: '' }
+    return { kind: 'paste', slot, input }
   }
   if (head === 'junior') {
     const slot = words[1]?.toLowerCase() as SlotName | undefined
@@ -181,7 +230,10 @@ export function parseCrewCommand(args: string): CrewCommand | null {
 /** Applies a command to the overrides. */
 export function applyCrewCommand(overrides: CrewOverrides, command: CrewCommand): CrewOverrides {
   if (command.kind === 'mode') return { ...overrides, mode: command.mode }
-  if (command.kind === 'model') return { ...overrides, models: { ...(overrides.models ?? {}), [command.slot]: command.model } }
+  if (command.kind === 'model') {
+    const recent = command.model ? [command.model, ...(overrides.recent ?? []).filter((id) => id !== command.model)].slice(0, RECENT_MODELS) : overrides.recent
+    return { ...overrides, models: { ...(overrides.models ?? {}), [command.slot]: command.model }, ...(recent ? { recent } : {}) }
+  }
   if (command.kind === 'junior') return { ...overrides, junior: command.slot }
   if (command.kind === 'reviewer') return { ...overrides, reviewer: command.reviewer }
   return overrides
@@ -196,9 +248,9 @@ export function describeCrew(crew: Crew, routerOn: boolean): string {
   ]
   for (const name of SLOT_NAMES) {
     const slot = crew.slots.find((s) => s.name === name)
-    lines.push(`  ${name.padEnd(6)} ${slot ? slot.model : 'off'}${name === crew.junior ? '   (the junior)' : ''}`)
+    lines.push(`  ${name.padEnd(6)} ${slot ? slot.model : 'not set'}${name === crew.junior ? '   (the junior)' : ''}`)
   }
-  lines.push(`  /jev <alpha|beta|gamma> <openrouter model>|off · /jev junior <slot>`)
+  lines.push(`  /jev <alpha|beta|gamma> <model pasted from openrouter.ai/models>|off · /jev junior <slot>`)
   lines.push(`reviewer: ${crew.reviewer}   /jev reviewer <codex|opencode>`)
   return lines.join('\n')
 }
@@ -317,4 +369,105 @@ export function crewNote(crew: Crew, junior: Slot | null, working: Reviewer[]): 
     )
   }
   return lines
+}
+
+// ---- setting a slot: what you paste from OpenRouter, checked against its list -----
+
+/** An OpenRouter model id: provider/model, optionally with a :variant or a ~ alias. */
+export const MODEL_ID = /^~?[\w.-]+\/[\w.:-]+$/
+
+/** Where to find a model to paste: OpenRouter's list, filtered to models that can call tools. */
+export const MODELS_PAGE = 'https://openrouter.ai/models?supported_parameters=tools'
+
+/** A model as OpenRouter's list (GET /api/v1/models) describes it. */
+export interface OpenRouterModel {
+  id: string
+  name?: string
+  canonical_slug?: string
+  context_length?: number
+  /** When OpenRouter added it, seconds since the epoch: the newest are suggested first. */
+  created?: number
+  pricing?: { prompt?: string; completion?: string }
+  supported_parameters?: string[]
+}
+
+export type Resolved =
+  | { ok: true; id: string; about: string }
+  | { ok: false; why: string; suggestions: string[] }
+
+const clean = (text: string) => text.trim().replace(/^[`'"<]+|[`'">]+$/g, '').trim()
+
+/** Per million tokens, as OpenRouter shows it: "$0.14 in · $0.42 out". */
+function price(model: OpenRouterModel): string {
+  const perMillion = (value: string | undefined) => {
+    const n = Number(value)
+    return Number.isFinite(n) ? `$${(n * 1e6).toFixed(n * 1e6 < 1 ? 3 : 2).replace(/0+$/, '').replace(/\.$/, '')}` : '?'
+  }
+  return `${perMillion(model.pricing?.prompt)} in · ${perMillion(model.pricing?.completion)} out per million tokens`
+}
+
+/** "DeepSeek: DeepSeek V4.1 Flash · 1M context · $0.14 in · $0.42 out per million tokens" */
+export function aboutModel(model: OpenRouterModel): string {
+  const context = model.context_length
+    ? ` · ${model.context_length >= 1e6 ? `${Math.round(model.context_length / 1e5) / 10}M` : `${Math.round(model.context_length / 1000)}k`} context`
+    : ''
+  return `${model.name ?? model.id}${context} · ${price(model)}`
+}
+
+/**
+ * What was pasted, as a model OpenRouter serves and a subagent can use.
+ * Accepted: the id (`deepseek/deepseek-v4.1-flash`), its page link
+ * (`https://openrouter.ai/deepseek/deepseek-v4.1-flash`), its dated slug, or
+ * its name as the list shows it (`DeepSeek: DeepSeek V4.1 Flash`, or without
+ * the `DeepSeek: ` prefix). Refused: anything not in the list (with the
+ * closest ids to try), and models that can't call tools: a subagent works
+ * through tools, so one without them could do nothing.
+ *
+ * With no list (OpenRouter unreachable), an id-shaped paste is taken as is;
+ * the slot's own check (a 1-token request) then says whether it answers.
+ */
+export function resolveModel(pasted: string, catalog: readonly OpenRouterModel[] | null): Resolved {
+  let text = clean(pasted)
+  const link = /^(?:https?:\/\/)?(?:www\.)?openrouter\.ai\/(?:models\/)?([^?#\s]+)/i.exec(text)
+  if (link) text = (link[1] as string).split('/').slice(0, 2).join('/')
+  if (!text) return { ok: false, why: 'nothing pasted', suggestions: [] }
+  if (!catalog) {
+    return MODEL_ID.test(text)
+      ? { ok: true, id: text, about: `${text} (OpenRouter's list couldn't be read to check it)` }
+      : { ok: false, why: `"${text}" isn't a model id (provider/model), and OpenRouter's list couldn't be read to look it up`, suggestions: [] }
+  }
+  const lower = text.toLowerCase()
+  const bare = (name: string | undefined) => (name ?? '').toLowerCase().replace(/^[^:]+:\s*/, '')
+  const found =
+    catalog.find((m) => m.id.toLowerCase() === lower) ??
+    catalog.find((m) => (m.canonical_slug ?? '').toLowerCase() === lower) ??
+    catalog.find((m) => (m.name ?? '').toLowerCase() === lower) ??
+    catalog.find((m) => bare(m.name) === lower.replace(/^[^:]+:\s*/, ''))
+  if (!found) {
+    const words = lower.split(/[^a-z0-9.]+/).filter((w) => w.length > 1)
+    const score = (m: OpenRouterModel) => words.filter((w) => `${m.id} ${m.name ?? ''}`.toLowerCase().includes(w)).length
+    const suggestions = catalog
+      .filter((m) => (m.supported_parameters ?? []).includes('tools') && score(m) > 0)
+      .sort((a, b) => score(b) - score(a) || (b.created ?? 0) - (a.created ?? 0) || a.id.length - b.id.length)
+      .slice(0, 3)
+      .map((m) => m.id)
+    return { ok: false, why: `OpenRouter has no model "${text}"`, suggestions }
+  }
+  if (!(found.supported_parameters ?? []).includes('tools')) {
+    return { ok: false, why: `${found.id} can't call tools on OpenRouter, so it can't work as a subagent`, suggestions: [] }
+  }
+  return { ok: true, id: found.id, about: aboutModel(found) }
+}
+
+/** `/jev alpha`: the slot, its model, and the models set before (to switch back). */
+export function describeSlot(crew: Crew, name: SlotName, recent: readonly string[] = []): string {
+  const slot = crew.slots.find((s) => s.name === name)
+  const lines = [
+    slot ? `${name}: ${slot.model}${name === crew.junior ? ' (the junior)' : ''}` : `${name}: not set`,
+    `  set it: /jev ${name} <model>, pasting its id, page link or name from ${MODELS_PAGE}`,
+  ]
+  if (slot) lines.push(`  turn it off: /jev ${name} off`)
+  const others = recent.filter((id) => id !== slot?.model)
+  if (others.length > 0) lines.push('  set before:', ...others.map((id) => `    /jev ${name} ${id}`))
+  return lines.join('\n')
 }

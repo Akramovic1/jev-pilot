@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.0 — 2026-09-24
+
+**You choose the custom models.**
+
+- **No default model.** `alpha`, `beta` and `gamma` start empty; nothing is sent to a model you didn't pick. (If you already used `alpha`, it keeps the model it had.)
+- **Paste it from OpenRouter.** `/jev alpha <model>` takes the model's id, its page link or its name, as you copy it from [openrouter.ai/models](https://openrouter.ai/models?supported_parameters=tools). It's looked up in OpenRouter's live list and set with what it is (name, context, price), then checked with a 1-token request. A model OpenRouter doesn't have is refused with the three closest ones to try, newest first; so is one that can't call tools, since a subagent works through them.
+- **Kept for every session.** The choice is recorded in `~/.claude/jev-pilot/models.json`, which every session reads, in any project and whichever way jev-pilot is installed (the plugin's own store is kept per install, so it wasn't enough). A session already open takes up a change made elsewhere at its next prompt.
+- **Easy to switch back.** `/jev alpha` shows the slot, its model and the last five models you set, each as the command that sets it again.
+- The modes that hand work to custom models (`budget`, `junior-lead`) say how to set one when none is set.
+
 ## 0.6.0 — 2026-09-24
 
 **One request per prompt, a router that can't break your work, and tuning learned from your own turns.**

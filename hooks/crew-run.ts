@@ -5,8 +5,8 @@
  * the hook. Checks are cheap: a 1-token call per custom model on OpenRouter,
  * `codex login status`, `opencode --version` and `opencode auth list`.
  */
-import { juniorSlot, juniorSpec, overridesOf, REVIEWERS, reviewerSpec, routerTable, slotAlias, type AgentSpec } from './crew.ts'
-import { codexVerdict, crew, crewStarted, markCrewStarted, opencodeVerdict, reviewerHealthy, router, setCrewOverrides, setHealth, setRouter } from './crew-state.ts'
+import { juniorSlot, juniorSpec, overridesOf, recordedModels, REVIEWERS, reviewerSpec, routerTable, slotAlias, type AgentSpec, type OpenRouterModel } from './crew.ts'
+import { codexVerdict, crew, crewOverrides, crewStarted, markCrewStarted, opencodeVerdict, reviewerHealthy, router, setCrewOverrides, setHealth, setRouter } from './crew-state.ts'
 
 export interface CrewIo {
   fetch: (url: string, init: { method?: string; headers?: Record<string, string>; body?: string }) => Promise<{ ok: boolean; status: number; text: string }>
@@ -14,6 +14,8 @@ export interface CrewIo {
   home: () => Promise<string | undefined>
   routerUrl: () => Promise<string | undefined>
   write: (path: string, text: string) => Promise<void>
+  /** A file's text, or null when it isn't there. */
+  read: (path: string) => Promise<string | null>
   run: (argv: string[], timeoutMs: number) => Promise<{ exitCode: number; stdout: string; stderr: string }>
   storeGet: (key: string) => Promise<unknown>
   sleep: (ms: number) => Promise<void>
@@ -29,9 +31,9 @@ export async function modelsFile(io: CrewIo): Promise<string> {
   return `${home}/.claude/jev-pilot/models.json`
 }
 
-/** Writes the router's table from the crew as it stands now. */
+/** Writes the router's table, and the record of what's set, from the crew as it stands now. */
 export async function publishSlots(io: CrewIo): Promise<void> {
-  await io.write(await modelsFile(io), routerTable(crew()))
+  await io.write(await modelsFile(io), routerTable(crew(), crewOverrides().recent ?? []))
 }
 
 async function within<T>(io: CrewIo, ms: number, work: Promise<T>): Promise<T | null> {
@@ -41,7 +43,12 @@ async function within<T>(io: CrewIo, ms: number, work: Promise<T>): Promise<T | 
 /** A session's crew: the saved `/jev` changes, the router, the slots file. */
 export async function startCrew(io: CrewIo): Promise<void> {
   markCrewStarted()
-  setCrewOverrides(overridesOf(await io.storeGet(CREW_KEY).catch(() => undefined)))
+  // The mode, junior and reviewer from the store; the models from
+  // models.json, which every install and project shares, and which holds
+  // the latest change made anywhere.
+  const stored = overridesOf(await io.storeGet(CREW_KEY).catch(() => undefined))
+  const recorded = recordedModels(await io.read(await modelsFile(io)).catch(() => null))
+  setCrewOverrides(recorded ? { ...stored, ...recorded } : stored)
   const url = (await io.routerUrl())?.replace(/\/$/, '') || null
   setRouter(null)
   if (url) {
@@ -152,4 +159,43 @@ export async function startSession(io: CrewIo, key: string | null): Promise<void
  */
 export async function ensureCrew(io: CrewIo, key: string | null): Promise<void> {
   if (!crewStarted()) await startSession(io, key)
+  else await refreshModels(io, key)
+}
+
+/**
+ * The models set in another session since this one started (models.json
+ * changed): taken up here too, and a newly set model checked. One small
+ * file read per prompt.
+ */
+export async function refreshModels(io: CrewIo, key: string | null): Promise<void> {
+  const recorded = recordedModels(await io.read(await modelsFile(io)).catch(() => null))
+  if (!recorded) return
+  const current = crewOverrides()
+  const before = crew().slots
+  if (JSON.stringify(recorded.models ?? {}) === JSON.stringify(current.models ?? {}) && JSON.stringify(recorded.recent ?? []) === JSON.stringify(current.recent ?? [])) return
+  setCrewOverrides({ ...current, ...recorded })
+  for (const slot of crew().slots) {
+    if (!before.some((b) => b.name === slot.name && b.model === slot.model)) void checkSlot(io, key, slot.name, slot.model).catch(() => undefined)
+  }
+  await registerCrew(io)
+}
+
+let catalogCache: { at: number; models: OpenRouterModel[] } | null = null
+
+/**
+ * OpenRouter's model list, to check what `/jev <slot>` was given against
+ * (public, no key). Kept 10 minutes; null when it can't be read in 6 s.
+ */
+export async function modelCatalog(io: CrewIo): Promise<OpenRouterModel[] | null> {
+  if (catalogCache && Date.now() - catalogCache.at < 600_000) return catalogCache.models
+  const answer = await within(io, 6000, io.fetch('https://openrouter.ai/api/v1/models', { method: 'GET' }).catch(() => null))
+  if (!answer || !answer.ok) return null
+  try {
+    const models = (JSON.parse(answer.text) as { data?: unknown }).data
+    if (!Array.isArray(models)) return null
+    catalogCache = { at: Date.now(), models: models.filter((m): m is OpenRouterModel => !!m && typeof (m as OpenRouterModel).id === 'string') }
+    return catalogCache.models
+  } catch {
+    return null
+  }
 }

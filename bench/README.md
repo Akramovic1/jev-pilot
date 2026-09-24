@@ -28,7 +28,7 @@ A tiny shop backend in `fixture/` (about 20 files). Each task has a prompt and a
 
 - **off**: no jev-pilot, effort `high` (Claude Code's usual default).
 - **jev**: jev-pilot loaded, effort starting at `medium`.
-- **junior**: jev with the `junior-lead` mode: easy coding can go to a junior on the `alpha` slot (DeepSeek V4.1 Flash, through jev-router), reviewed by the main model. It runs on the four coding tasks only (`--junior-tasks`). Claude Code can't price a custom model, so the junior's tokens are re-priced at OpenRouter's live price for the slot's model.
+- **junior**: jev with the `junior-lead` mode: easy coding can go to a junior on the `alpha` slot (whatever model you set there; the results below used DeepSeek V4.1 Flash), through jev-router, reviewed by the main model. It runs on the four coding tasks only (`--junior-tasks`). Claude Code can't price a custom model, so the junior's tokens are re-priced at OpenRouter's live price for the slot's model.
 
 Every run gets a fresh copy of the fixture and a lean Claude Code config with your login only (no other plugins, skills or MCP servers), so the setups start from the same place and each run stays cheap. Each run is capped at `--budget` dollars and `--max-turns` turns; a run that hits a cap counts as failed.
 
