@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.12 — 2026-09-24
+
+Better effort predictions, measured on 76 real, hand-labelled requests and subagent briefs from two weeks of use. Answers off by two or more levels (wasted tokens, or a task starved of thinking) went from 19 to 9; exact answers from 43% to 50%.
+
+- **Jev rates the work, not the topic.** Advice questions about architecture or security, and reviews of small diffs, were rated xhigh for how serious they sounded (8 of 26 medium tasks). The effort question now says to rate the work the request asks for.
+- **Short approvals never lower the effort.** "fix all and continue", "ok go ahead", "1" say nothing about the size of what they approve. A short reply that isn't a question can raise the effort but never lower it.
+- **Jev sees what a reply answers.** The newest message from Claude keeps its beginning and its end (where it asks "Shall I start?") with about half the context budget, instead of only its first 500 characters.
+- Examples on each level of the rating scale were tried and made things worse; they're not used.
+
 ## 0.4.11 — 2026-09-24
 
 - **Better graph and parallel advice.** Following the graph-engineering checklist (nodes, edges, shared state, a separate reviewer, bounds), `graph` advice is now a small blueprint Claude follows with plain subagents: real nodes only (a step you could do inline isn't one), waves that start together in the background, one shared plan file each node writes only its part of, a separate read-only reviewer after each join (findings go back to the builder once), at most 4 subagents at a time and 2 review rounds per wave, and "if it can't be explained in one breath, work directly". `parallel` advice is fan-out-then-join, in the background, integrated and tested once.

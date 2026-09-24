@@ -69,6 +69,7 @@ import {
   effortLevel,
   effortScoreOf,
   engineMoved,
+  isFollowUp,
   escalate,
   DEFAULT_BASE_URL,
   DEFAULT_MODEL,
@@ -549,7 +550,7 @@ export const register: Register = (on, options) => {
     const taken = pending.take()
     const decision = taken?.decision ?? null
     turnPrompt = taken?.prompt ?? null
-    const routing = route(decision, { model: e.model, effort: e.effort }, policy)
+    const routing = route(decision, { model: e.model, effort: e.effort }, policy, { noLowering: taken ? isFollowUp(taken.prompt) : false })
     const change: { model?: string; effort?: Effort } = {}
     // The main loop's `model` is sent to the API as written, so an alias
     // becomes the id the engine was seen using for it; a subagent's

@@ -179,7 +179,28 @@ export function endpoint(provider: Provider, baseUrl: string): string {
  * question, 1 with this one (the brief that asked for a design).
  */
 export const SUBAGENT_EFFORT_INSTRUCTIONS =
-  'How much step-by-step reasoning does a subagent need to carry out this brief? A brief that already names the files, the steps and the tests has done the design: carrying it out is execution. Rate higher only when the brief itself asks for design, an unknown cause, or reasoning that is not already written out.'
+  'How much step-by-step reasoning does a subagent need to carry out this brief? A brief that already names the files, the steps and the tests has done the design: carrying it out is execution. Rate higher only when the brief itself asks for design, an unknown cause, or reasoning that is not already written out. Rate the work, not how important the topic sounds: reviewing a small diff is medium, even for security.'
+
+/**
+ * The effort question for the conversation. Measured on 76 labelled real
+ * requests: rating the topic instead of the work put 8 of 26 medium tasks
+ * (advice questions, small security reviews) at xhigh; this wording, with
+ * the follow-up rule in `route`, took the misses of 2+ levels from 19 to 9.
+ */
+export const EFFORT_INSTRUCTIONS =
+  'How much step-by-step reasoning does the work this request asks for need? Rate the work, not how important the topic sounds: a question or advice answered in words, even about architecture or security, is low or medium, and reviewing a small diff is medium. A short reply that approves, continues or picks an option ("go ahead", "fix all and continue", "1") takes the size of the work it approves, from the recent conversation.'
+
+/**
+ * A short reply that is not a question ("fix all and continue", "ok go
+ * ahead", "1"): it continues or approves work, so its own words say nothing
+ * about how big that work is. Such a reply never lowers the effort.
+ */
+export function isFollowUp(prompt: string): boolean {
+  const text = prompt.trim()
+  if (!text || text.endsWith('?')) return false
+  if (/^(what|why|how|is|are|do|does|did|can|could|should|where|when|which|who)\b/i.test(text)) return false
+  return text.split(/\s+/).length <= 8
+}
 
 export function questions(provider: Provider, withStrategy = false, subagent = false): Record<string, unknown> {
   const asked: Record<string, unknown> = {
@@ -190,7 +211,7 @@ export function questions(provider: Provider, withStrategy = false, subagent = f
     },
     effort: {
       type: 'score',
-      instructions: subagent ? SUBAGENT_EFFORT_INSTRUCTIONS : 'How much step-by-step reasoning does this task need?',
+      instructions: subagent ? SUBAGENT_EFFORT_INSTRUCTIONS : EFFORT_INSTRUCTIONS,
       criteria: EFFORT_RUBRIC,
     },
     risky: {
@@ -575,6 +596,7 @@ export function route(
   decision: Decision | null,
   current: { model: string; effort?: string | number },
   config: PolicyConfig,
+  hints: { noLowering?: boolean } = {},
 ): Routing {
   if (!decision) return NOTHING
 
@@ -625,9 +647,13 @@ export function route(
     // Above the ceiling already (set by hand): the ceiling limits what this
     // router asks for, it is not a reason to cut what the person chose.
     const aboveCeiling = currentRank !== null && currentRank > ceilingOf(config)
+    // A short follow-up approves or continues work its words don't describe:
+    // it may raise the effort, never lower it.
+    const lowering = currentRank !== null && wantedRank < currentRank
     if (
       comparable &&
       !aboveCeiling &&
+      !(hints.noLowering && lowering) &&
       wantedRank !== currentRank &&
       (forced || allowed(wantedRank, currentRank, decision.effortConfidence, config))
     ) {

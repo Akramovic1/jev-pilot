@@ -13,6 +13,8 @@ import {
   route,
   STRATEGY_ORDER,
   SUBAGENT_EFFORT_INSTRUCTIONS,
+  EFFORT_INSTRUCTIONS,
+  isFollowUp,
 } from '../hooks/model-router.policy.ts'
 import type { Decision, PolicyConfig, Strategy, StrategyConfig } from '../hooks/model-router.policy.ts'
 import { requestBody as skillRequestBody, wideQuestions } from '../hooks/skill-suggestion.policy.ts'
@@ -362,4 +364,37 @@ test('parallel advice fans out in the background and joins once', () => {
   expect(parallel).toContain('Fan out, then join')
   expect(parallel).toContain('in the background')
   expect(parallel).toContain('Two pieces that touch the same file are one piece')
+})
+
+// ---- measured fixes (76 labelled real requests, 2026-09-24) ------------------------
+
+test('a short reply that is not a question is a follow-up; a question is not', () => {
+  for (const reply of ['fix all and continue', 'ok go ahead with the iam update', '1', 'yes do it', 'the limit already reset']) {
+    expect(isFollowUp(reply)).toBe(true)
+  }
+  for (const other of ['what status?', 'is it finish', 'why does the build fail', 'rename getUser to fetchUser across the api, its callers, the tests and the docs please']) {
+    expect(isFollowUp(other)).toBe(false)
+  }
+})
+
+test('a follow-up may raise the effort, never lower it', () => {
+  const lowAnswer = { tier: 'fast' as const, confidence: 0.95, risky: 0, effort: 0, effortConfidence: 0.95, effortProbabilities: { '0': 0.95, '1': 0.05 } }
+  expect(route(lowAnswer, { model: 'claude-opus-5-5', effort: 'medium' }, config).effort).toBe('low')
+  expect(route(lowAnswer, { model: 'claude-opus-5-5', effort: 'medium' }, config, { noLowering: true }).effort).toBeNull()
+  const highAnswer = { ...lowAnswer, effort: 2, effortProbabilities: { '2': 0.9, '1': 0.1 } }
+  expect(route(highAnswer, { model: 'claude-opus-5-5', effort: 'medium' }, config, { noLowering: true }).effort).toBe('high')
+})
+
+test('the conversation question rates the work, not the topic', () => {
+  expect((questions('openrouter') as Record<string, { instructions: string }>).effort?.instructions).toBe(EFFORT_INSTRUCTIONS)
+  expect(EFFORT_INSTRUCTIONS).toContain('Rate the work, not how important the topic sounds')
+  expect(SUBAGENT_EFFORT_INSTRUCTIONS).toContain('Rate the work, not how important the topic sounds')
+})
+
+test('the newest assistant message keeps its beginning and its end: where it asks what a short reply answers', () => {
+  const report = `Plan 1 is merged. ${'The tests pass and the typecheck is clean. '.repeat(40)}Should I start writing plan 2?`
+  const recent = recentContext([user('build plan 1'), assistant(report)], 'ok do it', { messages: 4, chars: 2000 })
+  expect(recent).toContain('Plan 1 is merged.')
+  expect(recent).toContain('Should I start writing plan 2?')
+  expect(recent.length).toBeLessThanOrEqual(2000)
 })
