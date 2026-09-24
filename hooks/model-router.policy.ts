@@ -68,13 +68,13 @@ export const STRATEGY_ORDER: readonly Strategy[] = ['direct', 'delegate', 'paral
  */
 const STRATEGY_CRITERIA: Record<Strategy, string> = {
   direct:
-    'The main conversation does it itself: a question, a lookup, a command, or a change to one or a few files. The right answer for most requests, including most follow-ups.',
+    'The main conversation does it itself: a question, a lookup, a command, or a change to one or a few files. One job with one clear finish line. The right answer for most requests, including most follow-ups.',
   delegate:
-    'One subagent on a cheaper model does a broad but mechanical part first — searching or reading across many files, a codebase sweep, bulk renames — and the main conversation acts on its short report.',
+    'One subagent on a cheaper model does a broad but mechanical part first (searching or reading across many files, a codebase sweep, bulk renames) and the main conversation acts on its short report.',
   parallel:
-    'Several independent pieces with no shared files or state (separate modules, services or investigations), each done by its own subagent at the same time, then combined.',
+    'Fan out, then join: several independent pieces with no shared files or state (separate modules, services or investigations), each done by its own subagent at the same time, then combined in one place.',
   graph:
-    'A large build with parts that depend on each other: plan a small dependency graph, run each wave of independent parts as parallel subagents, integrate and test between waves. Only for work too big for one conversation to do well.',
+    'Work one conversation would lose track of: parts that depend on each other in waves, or distinct specialties that hand off (build, then an independent review, then fixes), with results fanning in to be checked. Only for large builds; most work, even big work, is direct or parallel.',
 }
 
 /**
@@ -672,9 +672,16 @@ const STRATEGY_HOW: Record<Exclude<Strategy, 'direct'>, string> = {
   delegate:
     'Send the broad, mechanical part (searching or reading across many files) to one subagent with a self-contained brief and a request for a short report, then do the rest here. Keep small lookups here: a subagent costs a fresh context.',
   parallel:
-    'Split the work into independent pieces that share no files, and dispatch one subagent per piece in a single message so they run at the same time. Give each a self-contained brief, then combine and verify their results here.',
-  graph:
-    'Plan a small dependency graph first: which parts depend on which. Run each wave of independent parts as parallel subagents, each owning its own files, then integrate and run the tests before the next wave. Keep the graph small; a few nodes is usually enough.',
+    'Fan out, then join. Split the work into independent pieces that share no files, and start one subagent per piece in a single message, in the background, so they run at the same time. Give each a self-contained brief naming its files and how to check its piece. Then join here: read their reports, integrate, and run the tests once. Two pieces that touch the same file are one piece.',
+  graph: [
+    'Sketch the graph in a few lines before starting, and keep it that small:',
+    '- Nodes: one subagent per independent part or real specialty (a builder per part; one read-only reviewer). A step you could do inline is not a node.',
+    '- Edges: parts with no dependency between them start together, in one message, in the background; a wave starts only when the parts it depends on are done, and joins here.',
+    '- Shared state: one plan file with each node\'s brief, files and status. Each node writes only its own section and its own files.',
+    '- Review: after each join, a separate read-only reviewer subagent checks the result against the plan and the tests. On a fail, send its findings back to the builder once, then decide here.',
+    '- Bounds: at most 4 subagents at a time and 2 review rounds per wave; a failed node is redone alone, without touching the others\' work.',
+    'If the graph cannot be explained in one breath, work directly instead.',
+  ].join('\n'),
 }
 
 /**

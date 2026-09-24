@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.11 — 2026-09-24
+
+- **Better graph and parallel advice.** Following the graph-engineering checklist (nodes, edges, shared state, a separate reviewer, bounds), `graph` advice is now a small blueprint Claude follows with plain subagents: real nodes only (a step you could do inline isn't one), waves that start together in the background, one shared plan file each node writes only its part of, a separate read-only reviewer after each join (findings go back to the builder once), at most 4 subagents at a time and 2 review rounds per wave, and "if it can't be explained in one breath, work directly". `parallel` advice is fan-out-then-join, in the background, integrated and tested once.
+- **Jev tells the strategies apart better.** Measured on 12 clear-cut requests: 11/12 right before, 12/12 now (tests for four independent modules now read as parallel instead of direct 50%), and real multi-phase builds read as graph at 98–100% instead of 84–95%. Ordinary requests stay direct.
+
 ## 0.4.10 — 2026-09-24
 
 - **Subagents are named by their task.** The bubble and the log use the subagent's short task description instead of its generic type, and show its model and effort together: `Fix S2a Codex findings → sonnet · high` instead of `general-purpose → high`.

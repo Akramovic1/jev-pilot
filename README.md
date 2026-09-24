@@ -165,8 +165,8 @@ flowchart LR
 **Strategy.** The same request asks how to carry the work out:
 - **`direct`**: the usual case, and nothing is attached.
 - **`delegate`**: one subagent on a cheaper model does the broad, mechanical part.
-- **`parallel`**: independent pieces run as simultaneous subagents.
-- **`graph`**: small dependency waves of subagents, with integration and tests between waves.
+- **`parallel`**: fan out, then join. Independent pieces that share no files run as simultaneous background subagents; the results are integrated and tested once.
+- **`graph`**: for large builds only, a small blueprint of plain subagents. Real nodes (a step you could do inline isn't one), waves that start together, one shared plan file, a separate read-only reviewer after each join, and bounds (at most 4 subagents at a time, 2 review rounds per wave). If it can't be explained in one breath, Claude works directly.
 
 Advice is attached only when Jev is confident (0.6, or 0.8 for `graph`) and it agrees with the tier. Claude may ignore it.
 

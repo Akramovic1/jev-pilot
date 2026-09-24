@@ -338,3 +338,28 @@ test('a subagent is asked about carrying out its brief, on the same rubric', () 
   expect(subagent.effort?.criteria).toEqual(general.effort?.criteria)
   expect(JSON.parse(requestBody('openrouter', { prompt: 'x' }, 'm', false, true)).questions.effort.instructions).toBe(SUBAGENT_EFFORT_INSTRUCTIONS)
 })
+
+// ---- the graph blueprint: nodes, edges, shared state, a reviewer, bounds ------------
+
+test('graph advice is a small blueprint: real nodes, parallel waves, one plan file, a separate reviewer, bounds', () => {
+  const graph = adviseStrategy(
+    { tier: 'deep', confidence: 0.9, risky: 0, effort: 3, effortConfidence: 0.8, strategy: 'graph', strategyConfidence: 0.95 },
+    { minConfidence: 0.6, minGraphConfidence: 0.8, graphSkill: '' },
+  ).block as string
+  expect(graph).toContain('A step you could do inline is not a node')
+  expect(graph).toContain('in one message, in the background')
+  expect(graph).toContain('one plan file')
+  expect(graph).toContain('separate read-only reviewer')
+  expect(graph).toContain('at most 4 subagents at a time')
+  expect(graph).toContain('one breath')
+})
+
+test('parallel advice fans out in the background and joins once', () => {
+  const parallel = adviseStrategy(
+    { tier: 'balanced', confidence: 0.9, risky: 0, effort: 2, effortConfidence: 0.8, strategy: 'parallel', strategyConfidence: 0.9 },
+    { minConfidence: 0.6, minGraphConfidence: 0.8, graphSkill: '' },
+  ).block as string
+  expect(parallel).toContain('Fan out, then join')
+  expect(parallel).toContain('in the background')
+  expect(parallel).toContain('Two pieces that touch the same file are one piece')
+})
