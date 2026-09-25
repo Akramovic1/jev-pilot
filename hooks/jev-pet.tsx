@@ -39,6 +39,7 @@ import {
   type Act,
   ACT_LABEL,
   actOfTool,
+  CANVAS_W,
   currentSpeech,
   isBoosted,
   MOOD_COLOR,
@@ -395,14 +396,15 @@ export const register: Register = (on, options) => {
     return (
       <Box flexDirection="column">
         <Box key="jev:pet" flexDirection="row" justifyContent="flex-end" alignItems="center" columnGap={1} width={columns} paddingRight={4}>
-          <Box key="jev:bubble" borderStyle="round" borderColor={color} paddingX={1}>
+          {/* The bubble gives way: a long line is cut, the pilot is never squeezed. */}
+          <Box key="jev:bubble" borderStyle="round" borderColor={color} paddingX={1} flexShrink={1}>
             <Text key="jev:say" color={color} wrap="truncate-end">
               {text}
             </Text>
           </Box>
-          <Box key="jev:sprite" flexDirection="column">
+          <Box key="jev:sprite" flexDirection="column" flexShrink={0} width={CANVAS_W} minWidth={CANVAS_W}>
             {rows.map((row, y) => (
-              <Text key={`jev:row${y}`}>
+              <Text key={`jev:row${y}`} wrap="truncate-end">
                 {row.map((cell, x) => (
                   <Text key={`jev:${y}:${x}`} color={cell.fg} backgroundColor={cell.bg}>
                     {cell.ch}

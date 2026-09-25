@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.1 — 2026-09-26
+
+- **The pilot keeps its shape.** A long bubble (a long skill name mid-turn, in a narrow terminal) squeezed the pilot's column, so each of its rows wrapped onto two lines and the drawing came apart. The pilot now has a fixed width that never shrinks; the bubble gives way and cuts its text instead. Checked live at 60 columns mid-turn.
+
 ## 0.10.0 — 2026-09-26
 
 **Following Anthropic's guidance for Opus 5.5** (their post on the cost of a task), checked against my own data before each change.
