@@ -296,11 +296,12 @@ test('every effort option says when to choose it, one per rung', () => {
   for (const when of Object.values(options)) expect(when.length).toBeGreaterThan(40)
 })
 
-test('every model option names its model and says when to choose it; Sonnet has its own place', () => {
+test('Haiku and Sonnet only read; any subagent that writes code stays on Opus (Anthropic\'s guidance for Opus 5.5)', () => {
   const tiers = (questions('openrouter').tier as { type: string; criteria: Record<string, string> }).criteria
-  expect(tiers.fast).toMatch(/^Haiku\. Choose when there is no logic/)
-  expect(tiers.balanced).toMatch(/^Sonnet\. Choose when the logic is ordinary or already written down/)
-  expect(tiers.deep).toMatch(/^Opus\. Choose when the work needs real judgment/)
+  expect(tiers.fast).toMatch(/^Haiku\. Choose for read-only lookups/)
+  expect(tiers.fast).toContain('Nothing is written or changed')
+  expect(tiers.balanced).toMatch(/^Sonnet\. Choose for read-only work/)
+  expect(tiers.deep).toMatch(/^Opus\. Choose whenever the task writes or changes code or files/)
 })
 
 test('an effort answer given as a choice reads as probabilities by rung, with their mean as the score', () => {
@@ -367,16 +368,20 @@ test('a subagent is asked about carrying out its brief, on the same rubric', () 
 
 // ---- the graph blueprint: nodes, edges, shared state, a reviewer, bounds ------------
 
-test('graph advice is a small blueprint: real nodes, parallel waves, one plan file, a separate reviewer, bounds', () => {
+test('graph advice is a small blueprint: real nodes, parallel waves, one reviewer at the end, bounds; no rituals', () => {
   const graph = adviseStrategy(
     { tier: 'deep', confidence: 0.9, risky: 0, effort: 3, effortConfidence: 0.8, strategy: 'graph', strategyConfidence: 0.95 },
     { minConfidence: 0.6, minGraphConfidence: 0.8, graphSkill: '' },
   ).block as string
-  expect(graph).toContain('A step you could do inline is not a node')
+  expect(graph).toContain('a step you could do inline is not a node')
   expect(graph).toContain('in one message, in the background')
-  expect(graph).toContain('one plan file')
-  expect(graph).toContain('separate read-only reviewer')
-  expect(graph).toContain('at most 4 subagents at a time')
+  expect(graph).toContain('plan file only if there are more than two waves')
+  expect(graph).toContain('After the final join, one read-only reviewer')
+  expect(graph).toContain('At most 4 subagents at a time')
+  // No plan to sketch in the reply, no review after every wave, no confidence number (prompt-audit).
+  expect(graph).not.toContain('Sketch')
+  expect(graph).not.toContain('after each join')
+  expect(graph).not.toContain('confidence')
   expect(graph).toContain('one breath')
 })
 

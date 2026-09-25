@@ -71,8 +71,13 @@ export const RECORD_LIMIT = 64
 /** The names the `alphaModel`/`betaModel`/`gammaModel` settings fill (before names were yours to choose). */
 export const LEGACY_NAMES = ['alpha', 'beta', 'gamma'] as const
 
+/**
+ * Read-only bulk work only: code is written on the main model (Anthropic's
+ * own guidance for Opus 5.5, and our junior-mode runs agreed: a cheaper
+ * model writing code cost more once the lead's review was counted).
+ */
 export const DEFAULT_SLOT_WHEN =
-  'Choose for bulk work with nothing to judge, where cost matters more than precision: searching or reading across many files and reporting what is there, summarizing, listing, filling in boilerplate from an existing pattern.'
+  'Choose for read-only bulk work where cost matters more than precision: searching or reading across many files and reporting what is there, summarizing logs or test output, listing. Never for writing or changing code.'
 
 /** The model name Claude Code uses for a slot; the router maps it to the slot's model. */
 export function slotAlias(name: string): string {
@@ -634,7 +639,7 @@ export function reviewerSpec(reviewer: Reviewer, model: string, choice: Reviewer
       ...modelMenu(reviewer, codexModels),
       '',
       `Then reply with ${name}'s findings and verdict as it gave them, without adding your own, and say which model and effort it ran on.`,
-      `If the command fails or times out, reply with the exit code and the error lines instead, and say the review didn't run. Don't retry more than once.`,
+      `If the command fails or times out, reply with the exit code and the error lines instead, and say the review didn't run. Retry at most once, and only on a timeout.`,
     ].join('\n'),
     tools: ['Bash'],
     model,
@@ -663,7 +668,7 @@ export function crewNote(crew: Crew, junior: Slot | null, working: Reviewer[], o
   }
   if (junior) {
     lines.push(
-      `${JUNIOR_AGENT} is a junior developer on ${junior.model}. Give it easy, well-specified coding changes (the files, the exact behavior, the command that proves it); then read its diff and run the tests yourself before calling the work done, and send it back once with your findings if it needs fixing.`,
+      `${JUNIOR_AGENT} is a junior developer on ${junior.model}. Give it easy, well-specified coding changes (the files, the exact behavior, the command that proves it); then read its diff. Rerun the tests only if its report doesn't show them passing or the diff goes beyond the brief. If it falls short, send your findings back once or fix small things yourself.`,
     )
   }
   if (working.length > 0) {
@@ -675,7 +680,7 @@ export function crewNote(crew: Crew, junior: Slot | null, working: Reviewer[], o
     const chosen = working.includes(crew.reviewer) ? crew.reviewer : (working[0] ?? null)
     lines.push(
       chosen
-        ? `After a significant change (a new feature, an edit across several files, anything touching security, money or stored data), before calling it done, spawn ${reviewerAgent(chosen)} with a brief: what changed and why, the files, what to check. Weigh its findings: fix what is right, and say why you disagree with the rest.`
+        ? `Before calling done a change that adds a feature or touches security, money or stored data, spawn ${reviewerAgent(chosen)} with a brief: what changed and why, the files, what to check. Fix the findings you agree with; mention briefly any you set aside.`
         : `No external reviewer is working (${REVIEWER_NAME[crew.reviewer]} failed its check; /jev status shows why), so there is no external review: say so once when one would have been due.`,
     )
   }

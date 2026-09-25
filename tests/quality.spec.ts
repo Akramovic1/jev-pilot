@@ -37,20 +37,24 @@ test('the answers read into the decision; ones not asked stay out of it', () => 
 // ---- the advice ---------------------------------------------------------------------
 
 test('no read over its bar: no advice at all', () => {
-  expect(qualityAdvice({ ...base, underspecified: 0.78, bugfix: 0.44, sensitive: 0.77 }, 'jev-pilot:codex-review')).toBeNull()
-  expect(qualityAdvice(null, null)).toBeNull()
+  expect(qualityAdvice({ ...base, underspecified: 0.78, bugfix: 0.44, sensitive: 0.77 })).toBeNull()
+  expect(qualityAdvice(null)).toBeNull()
 })
 
-test('each read over its bar adds its line, with how sure Jev was; the reviewer is named only when there is one', () => {
-  const vague = qualityAdvice({ ...base, underspecified: 0.9 }, null) ?? ''
+test('each read over its bar adds one plain line: no percentages, no procedure to narrate, no second review request', () => {
+  const vague = qualityAdvice({ ...base, underspecified: 0.9 }) ?? ''
   expect(vague).toContain('<jev_quality>')
   expect(vague).toContain('ask the user one short question, or state in one line the assumption')
-  expect(vague).toContain('90% sure')
-  const bug = qualityAdvice({ ...base, bugfix: 0.95 }, null) ?? ''
-  expect(bug).toContain('a failing test')
-  const costly = qualityAdvice({ ...base, sensitive: 0.9 }, 'jev-pilot:codex-review') ?? ''
-  expect(costly).toContain('have jev-pilot:codex-review review the change')
-  expect(qualityAdvice({ ...base, sensitive: 0.9 }, null)).not.toContain('review the change')
+  const bug = qualityAdvice({ ...base, bugfix: 0.95 }) ?? ''
+  expect(bug).toContain('If a test or command can reproduce it cheaply')
+  expect(bug).not.toContain('Show the bug first')
+  const costly = qualityAdvice({ ...base, sensitive: 0.9 }) ?? ''
+  expect(costly).toContain('Make sure a test covers the case you changed')
+  expect(costly).not.toContain('review')
+  for (const block of [vague, bug, costly]) {
+    expect(block).not.toContain('% sure')
+    expect(block).not.toContain('advice to weigh')
+  }
   expect(QUALITY_BARS.underspecified).toBe(0.85)
 })
 
@@ -82,7 +86,8 @@ test('the same command failing three times is a circle; a pass in between starts
   expect(run(true)).toContain('failed 3 times')
   expect(run(true)).toBeNull()
   expect(spinOf({ tool: 'Bash', command: 'ls' }, true, new Map(), new Map())).toBeNull()
-  expect(stepBackNote('x')).toContain('Step back before the next change')
+  expect(stepBackNote('x')).toContain('try a different approach rather than a variant')
+  expect(stepBackNote('x')).not.toContain('in full')
 })
 
 // ---- corrections in the ledger ---------------------------------------------------------
@@ -116,4 +121,23 @@ test('cheap starts you keep correcting make jev-pilot lean up, as raises do', ()
   const found = suggestions(corrected, config)
   expect(found.map((f) => f.option)).toContain('minDowngradeConfidence')
   expect(found.find((f) => f.option === 'minDowngradeConfidence')?.why).toContain('corrected by you')
+})
+
+// ---- Opus 5.5 guidance: cache, the effort ceiling, Fable -----------------------------
+
+test('changing effort clears the cache only on Bedrock, Google Cloud or a gateway', async () => {
+  const { effortClearsCache } = await import('../hooks/model-router.policy.ts')
+  expect(effortClearsCache({})).toBe(false)
+  expect(effortClearsCache({ upstream: '' })).toBe(false)
+  expect(effortClearsCache({ upstream: 'https://api.anthropic.com' })).toBe(false)
+  expect(effortClearsCache({ bedrock: '1' })).toBe(true)
+  expect(effortClearsCache({ bedrock: '0', vertex: 'false' })).toBe(false)
+  expect(effortClearsCache({ vertex: 'true' })).toBe(true)
+  expect(effortClearsCache({ upstream: 'https://llm-gateway.example.com/anthropic' })).toBe(true)
+  expect(effortClearsCache({ upstream: 'not a url' })).toBe(false)
+})
+
+test('going in circles at xhigh or above also suggests Fable for that step', () => {
+  expect(stepBackNote('x', false)).not.toContain('Fable')
+  expect(stepBackNote('x', true)).toContain('/model fable')
 })

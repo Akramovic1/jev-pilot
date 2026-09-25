@@ -187,6 +187,9 @@ if marketplace_install; then
     claude plugin update "jev-pilot@$market"
     exit 0
   fi
+  # Where Claude requests really go, before the router takes ANTHROPIC_BASE_URL:
+  # jev-pilot holds the effort where changing it would clear the cache.
+  export JEV_ANTHROPIC_UPSTREAM="${JEV_ANTHROPIC_UPSTREAM:-${ANTHROPIC_BASE_URL:-}}"
   start_router "$(clone_dir)"
   picker_args "$@"
   exec claude ${PICKER[@]+"${PICKER[@]}"} "$@"
@@ -235,6 +238,7 @@ if [[ -z "${JEV_PILOT_NO_UPDATE_CHECK:-}" ]] && is_clone; then
   fi
 fi
 
+export JEV_ANTHROPIC_UPSTREAM="${JEV_ANTHROPIC_UPSTREAM:-${ANTHROPIC_BASE_URL:-}}"
 start_router "$plugin_dir"
 picker_args "$@"
 exec claude --plugin-dir "$plugin_dir" ${PICKER[@]+"${PICKER[@]}"} "$@"

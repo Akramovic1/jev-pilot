@@ -1,0 +1,162 @@
+[
+ {
+  "task": "1-rename",
+  "setup": "jev",
+  "run": 1,
+  "passed": true,
+  "costUsd": 0.2729108,
+  "inputTokens": 16,
+  "outputTokens": 2418,
+  "cacheReadTokens": 215234,
+  "cacheWriteTokens": 22680,
+  "turns": 15,
+  "seconds": 25,
+  "stopped": null,
+  "models": {
+   "opus-5-5": 0.273
+  },
+  "jev": [
+   "medium→low (deep)"
+  ]
+ },
+ {
+  "task": "2-slugify",
+  "setup": "jev",
+  "run": 1,
+  "passed": true,
+  "costUsd": 0.2067218,
+  "inputTokens": 8,
+  "outputTokens": 1365,
+  "cacheReadTokens": 82949,
+  "cacheWriteTokens": 20350,
+  "turns": 5,
+  "seconds": 15,
+  "stopped": null,
+  "models": {
+   "opus-5-5": 0.207
+  },
+  "jev": [
+   "medium→medium (deep)"
+  ]
+ },
+ {
+  "task": "3-flaky",
+  "setup": "jev",
+  "run": 1,
+  "passed": true,
+  "costUsd": 0.3231706000000001,
+  "inputTokens": 20,
+  "outputTokens": 3914,
+  "cacheReadTokens": 283133,
+  "cacheWriteTokens": 23523,
+  "turns": 11,
+  "seconds": 41,
+  "stopped": null,
+  "models": {
+   "opus-5-5": 0.323
+  },
+  "jev": [
+   "medium→xhigh (deep)"
+  ]
+ },
+ {
+  "task": "4-search",
+  "setup": "jev",
+  "run": 1,
+  "passed": true,
+  "costUsd": 0.1916042,
+  "inputTokens": 8,
+  "outputTokens": 724,
+  "cacheReadTokens": 82981,
+  "cacheWriteTokens": 20062,
+  "turns": 4,
+  "seconds": 12,
+  "stopped": null,
+  "models": {
+   "opus-5-5": 0.192
+  },
+  "jev": [
+   "medium→low (deep)"
+  ]
+ },
+ {
+  "task": "5-duration",
+  "setup": "jev",
+  "run": 1,
+  "passed": true,
+  "costUsd": 0.209019,
+  "inputTokens": 8,
+  "outputTokens": 1465,
+  "cacheReadTokens": 83275,
+  "cacheWriteTokens": 20379,
+  "turns": 5,
+  "seconds": 17,
+  "stopped": null,
+  "models": {
+   "opus-5-5": 0.209
+  },
+  "jev": [
+   "medium→medium (deep)"
+  ]
+ },
+ {
+  "task": "6-discount",
+  "setup": "jev",
+  "run": 1,
+  "passed": true,
+  "costUsd": 0.23011640000000003,
+  "inputTokens": 10,
+  "outputTokens": 1588,
+  "cacheReadTokens": 118422,
+  "cacheWriteTokens": 21829,
+  "turns": 5,
+  "seconds": 17,
+  "stopped": null,
+  "models": {
+   "opus-5-5": 0.23
+  },
+  "jev": [
+   "medium→medium (deep)"
+  ]
+ },
+ {
+  "task": "7-currency",
+  "setup": "jev",
+  "run": 1,
+  "passed": true,
+  "costUsd": 0.25470319999999996,
+  "inputTokens": 14,
+  "outputTokens": 1820,
+  "cacheReadTokens": 181556,
+  "cacheWriteTokens": 22742,
+  "turns": 8,
+  "seconds": 20,
+  "stopped": null,
+  "models": {
+   "opus-5-5": 0.255
+  },
+  "jev": [
+   "medium→medium (deep)"
+  ]
+ },
+ {
+  "task": "8-validate",
+  "setup": "jev",
+  "run": 1,
+  "passed": true,
+  "costUsd": 0.23861499999999997,
+  "inputTokens": 12,
+  "outputTokens": 1906,
+  "cacheReadTokens": 146835,
+  "cacheWriteTokens": 21385,
+  "turns": 9,
+  "seconds": 21,
+  "stopped": null,
+  "models": {
+   "opus-5-5": 0.239
+  },
+  "jev": [
+   "medium→medium (deep)"
+  ]
+ }
+]

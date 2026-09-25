@@ -8,12 +8,12 @@ import type { On, SessionMessage } from 'claude-code'
  * every log line is kept. Returns the log and the efforts each request of
  * the turn reached the model with.
  */
-function world(on: On, tier: string, messages: () => SessionMessage[]) {
+function world(on: On, tier: string, messages: () => SessionMessage[], env: Record<string, string> = {}) {
   const log: string[] = []
   const efforts: unknown[] = []
   const statuses: string[] = []
   const clock = mock.clock(on)
-  mock.env(on, { HOME: '/nowhere' })
+  mock.env(on, { HOME: '/nowhere', ...env })
   mock.store(on)
   on('ui.log', async (_$, e) => {
     log.push(e.text)
@@ -236,4 +236,19 @@ test('subagents still working in the background: the pilot cruises until they ar
   status = 'completed'
   await clock.advance(1600)
   expect(await bubble($)).not.toContain('working')
+})
+
+test('on Bedrock, where changing effort clears the cache, a struggling turn is not raised', async ($, on) => {
+  const transcript: SessionMessage[] = [{ role: 'user', text: 'fix the build', toolUses: [] }]
+  const { efforts } = world(on, 'balanced', () => transcript, { CLAUDE_CODE_USE_BEDROCK: '1' })
+  tools(on)
+  on('prompt.submit', async (_$, e) => ({ text: e.text, context: e.context }))
+  await $.prompt.submit({ text: 'fix the build', wait: false } as never)
+  await step($, 0, 'medium')
+  await bash($, 'false')
+  await step($, 1, 'medium')
+  await bash($, 'false')
+  await step($, 2, 'medium')
+  // Held: every request keeps the session's effort, failures or not.
+  expect(efforts).toEqual(['medium', 'medium', 'medium'])
 })

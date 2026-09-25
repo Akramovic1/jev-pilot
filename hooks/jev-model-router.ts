@@ -69,7 +69,7 @@ import type { ContextMessage } from './context.ts'
 import { appendEntry, configKeysOf, entriesOf, LEDGER_KEY, markCorrected, reportPrompt, suggestions, summarize } from './ledger.ts'
 import { dueToPropose, effective, initTuning, setTuning, TUNING_KEY, tuningLoaded, tuningOf } from './tuning.ts'
 import type { LedgerEntry, TunableConfig } from './ledger.ts'
-import { QUALITY_BARS, qualityAdvice, spinOf, stepBackNote } from './model-router.policy.ts'
+import { effortClearsCache, QUALITY_BARS, qualityAdvice, spinOf, stepBackNote } from './model-router.policy.ts'
 import {
   adviseStrategy,
   EFFORT_ORDER,
@@ -266,6 +266,11 @@ export const register: Register = (on, options) => {
     minUpgradeConfidence: number('minUpgradeConfidence', 0.3),
     minHighConfidence: number('minHighConfidence', 0.5),
     minDowngradeConfidence: number('minDowngradeConfidence', 0.6),
+    // Turns start at xhigh at most, and only when Jev is 60% sure a task is
+    // very hard. Anthropic warns that on Opus 5.5 xhigh thinks a lot more;
+    // replayed on 76 labelled prompts, every turn that started at xhigh
+    // needed it (4 of 4), and a high ceiling only started those four too
+    // low (exact 39 → 35). max is still reached only by the mid-turn raise.
     maxEffort: effortOption('maxEffort', 'xhigh'),
     // A near tie between two effort levels takes the higher one.
     closeMargin: Math.max(0, number('effortCloseMargin', 0.15)),
@@ -353,6 +358,12 @@ export const register: Register = (on, options) => {
   let failedInARow = 0
   // Said once: a custom model asked for with no router to serve it.
   let warnedNoRouter = false
+  // Where changing the effort clears the cache (Bedrock, Google Cloud, a
+  // gateway): the effort chosen for the first turn is held for the session,
+  // and chosen again after a compaction (which rewrites the cache anyway).
+  const effortChanges = text('effortChanges', 'auto')
+  let holdEffort: boolean | null = effortChanges === 'hold' ? true : effortChanges === 'per-turn' ? false : null
+  let heldEffort: Effort | null | undefined
   // What the project deploys with, found once per project folder.
   let platformCache: { cwd: string; text: string } | null = null
   // The turn id of the ledger entry this session finished last: the next
@@ -486,9 +497,7 @@ export const register: Register = (on, options) => {
       }
       // What makes the work better: ask first, test the bug first, check a costly change.
       if (feature('quality') && !reused) {
-        const working = REVIEWERS.filter(reviewerHealthy)
-        const reviewer = working.includes(crew().reviewer) ? crew().reviewer : (working[0] ?? null)
-        const quality = qualityAdvice(decision, reviewer ? reviewerAgent(reviewer) : null)
+        const quality = qualityAdvice(decision)
         if (quality) {
           block = [block, quality].filter((b): b is string => b !== null).join('\n\n')
           if (verbose) $.ui.log(`[jev-model-router] quality: ${quality.split('\n').filter((l) => l.startsWith('- ')).map((l) => l.slice(2, 40)).join(' · ')}`)
@@ -667,7 +676,7 @@ export const register: Register = (on, options) => {
     // neither the model nor the effort changes under its own tool loop —
     // unless the loop is visibly struggling, and then only the effort, up.
     if (e.index > 0 && e.turnId === appliedTurnId) {
-      if (routeMainEffort() && feature('raise') && escalateAfterErrors > 0 && escalatedTurnId !== e.turnId) {
+      if (routeMainEffort() && feature('raise') && escalateAfterErrors > 0 && escalatedTurnId !== e.turnId && !holdEffort) {
         const failed = failedInARow
         // Going in circles counts as struggling too, however the calls ended.
         const circling = spinning
@@ -753,7 +762,21 @@ export const register: Register = (on, options) => {
         $.ui.log(`[jev-model-router] no ${routing.model} model seen yet this session; model left as ${e.model}`)
       }
     }
-    if (routeMainEffort() && routing.effort) change.effort = routing.effort
+    if (holdEffort === null) {
+      holdEffort = effortClearsCache({
+        bedrock: await $.env.get('CLAUDE_CODE_USE_BEDROCK'),
+        vertex: await $.env.get('CLAUDE_CODE_USE_VERTEX'),
+        upstream: (await $.env.get('JEV_ANTHROPIC_UPSTREAM')) ?? (await $.env.get('ANTHROPIC_BASE_URL')),
+      })
+      if (holdEffort && lines) $.ui.log('jev · effort held for this session: here, changing it would clear the cached conversation')
+    }
+    if (holdEffort && heldEffort !== undefined) {
+      // Held: every turn keeps the effort the first one got.
+      if (heldEffort && heldEffort !== e.effort) change.effort = heldEffort
+    } else {
+      if (routeMainEffort() && routing.effort) change.effort = routing.effort
+      if (holdEffort) heldEffort = change.effort ?? (typeof e.effort === 'string' ? (e.effort as Effort) : null)
+    }
 
     appliedTurnId = e.turnId
     turnEngineModel = e.model
@@ -869,7 +892,9 @@ export const register: Register = (on, options) => {
           say('going in circles · stepping back', 'alert')
           $.ui.invalidate('ui.render')
         }
-        return { ...result, context: [...(result.context ?? []), stepBackNote(circle)] } as typeof result
+        const now = applied?.effort ?? current?.started ?? null
+        const atTop = now === 'xhigh' || now === 'max'
+        return { ...result, context: [...(result.context ?? []), stepBackNote(circle, atTop)] } as typeof result
       }
     }
     return result
@@ -944,6 +969,7 @@ export const register: Register = (on, options) => {
     resetStats()
     lastDecision = null
     lastEntryId = null
+    heldEffort = undefined
     spunTurnId = undefined
     subagents.clear()
     subagentEffort.clear()
@@ -954,6 +980,13 @@ export const register: Register = (on, options) => {
     escalatedTurnId = undefined
     turnPrompt = null
     failedInARow = 0
+    return next(e)
+  })
+
+  // A compaction rewrites the cached conversation anyway: a held effort may
+  // be chosen again. (Under a matcher: the skill module hooks it too.)
+  on('session.compact', { trigger: /(?:)/ }, async ($, e, next) => {
+    heldEffort = undefined
     return next(e)
   })
 

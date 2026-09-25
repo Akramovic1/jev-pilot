@@ -1,6 +1,6 @@
 {
   "name": "jev-pilot",
-  "version": "0.9.1",
+  "version": "0.10.0",
   "description": "TypeSafe's Jev decides how Claude Code works on each prompt: the main conversation's reasoning effort (low to xhigh, raised to max mid-turn when tool calls keep failing), each subagent's model, whether to split the work across subagents, and the one skill the prompt needs. Brings in custom OpenRouter models (a junior coder reviewed by Opus, or cheap bulk work) and Codex or OpenCode as reviewers, in modes you choose, each health-checked. Reads the prompt with recent context, records every decision, and suggests its own tuning. Backends: OpenRouter, TypeSafe's API, the Vercel AI Gateway, or Claude Code's built-in classifier. Built on claude-code-templates' jev-model-router and jev-skill-suggestion.",
   "author": {
     "name": "Ahmed Akram",
@@ -160,7 +160,7 @@
     "maxEffort": {
       "type": "string",
       "title": "Starting effort ceiling",
-      "description": "The highest reasoning level a turn may start at; higher levels are reached only by the mid-turn raise. An effort you set above it by hand is left alone",
+      "description": "The highest reasoning level a turn may start at; higher levels are reached only by the mid-turn raise, when a turn shows it's struggling. A turn starts at xhigh only when Jev is 60% sure the task is very hard; set high to keep xhigh for struggling turns only. An effort you set above it by hand is left alone",
       "default": "xhigh",
       "options": [
         "low",
@@ -169,6 +169,13 @@
         "xhigh",
         "max"
       ]
+    },
+    "effortChanges": {
+      "type": "string",
+      "title": "When the effort may change",
+      "description": "auto: every turn, except on Amazon Bedrock, Google Cloud or an API gateway, where changing the effort clears the cached conversation (the next request pays the cache-write price on all of it); there the first turn's effort is held for the session, and chosen again after a compaction. per-turn / hold force one or the other",
+      "default": "auto",
+      "options": ["auto", "per-turn", "hold"]
     },
     "maxRaisedEffort": {
       "type": "string",

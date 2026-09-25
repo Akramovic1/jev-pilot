@@ -153,28 +153,24 @@ export const QUALITY_BARS = { corrects: 0.7, underspecified: 0.85, sensitive: 0.
  * (advice to weigh, like the strategy), or null. `reviewer` is the external
  * reviewer to name for sensitive changes, when one is working.
  */
-export function qualityAdvice(decision: Decision | null, reviewer: string | null): string | null {
+export function qualityAdvice(decision: Decision | null): string | null {
   if (!decision) return null
   const sure = (value: number | null | undefined, bar: number) => typeof value === 'number' && value >= bar
-  const pct = (value: number | null | undefined) => `${Math.round((value ?? 0) * 100)}% sure`
+  // Each check is asked for in one place only (a review is the crew's note's
+  // to ask for), and none is a procedure to perform and narrate: rituals
+  // make Opus 5.5 write more and repeat tool calls (prompt-audit, 2026-09-26).
   const lines: string[] = []
   if (sure(decision.underspecified, QUALITY_BARS.underspecified)) {
-    lines.push(
-      `- It leaves open what to build or how it should behave (${pct(decision.underspecified)}). Before writing code, ask the user one short question, or state in one line the assumption you're making and go on.`,
-    )
+    lines.push("- It leaves open what to build or how it should behave. Before writing code, ask the user one short question, or state in one line the assumption you're making and go on.")
   }
   if (sure(decision.bugfix, QUALITY_BARS.bugfix)) {
-    lines.push(
-      `- It's a bug to fix (${pct(decision.bugfix)}). Show the bug first: a failing test, or a command that reproduces it. Then fix it, and show the same check passing.`,
-    )
+    lines.push('- It is likely a bug fix. If a test or command can reproduce it cheaply, use it as your check before and after the fix.')
   }
   if (sure(decision.sensitive, QUALITY_BARS.sensitive)) {
-    lines.push(
-      `- It touches code where a bug is costly (${pct(decision.sensitive)}). Before calling it done, run the tests that cover it and add one for the case you changed${reviewer ? `; then have ${reviewer} review the change` : ''}.`,
-    )
+    lines.push('- It touches code where a bug is costly. Make sure a test covers the case you changed.')
   }
   if (lines.length === 0) return null
-  return ['<jev_quality>', "Jev's read of this request (advice to weigh, not an order):", ...lines, '</jev_quality>'].join('\n')
+  return ['<jev_quality>', "Jev's read of this request:", ...lines, '</jev_quality>'].join('\n')
 }
 
 /** The reasoning levels a turn can ask for, cheapest first. */
@@ -189,10 +185,10 @@ export const TIER_ORDER: readonly Tier[] = ['fast', 'balanced', 'deep']
  * shape of the work, not about model names: the model never sees an id.
  */
 const TIER_CRITERIA: Record<Tier, string> = {
-  fast: 'Haiku. Choose when there is no logic to work out, only doing: search or list files, read and report what is there, copy, move or clone, fill in boilerplate from an existing pattern, add or fix comments and docs, rename, reformat, run a command and report the result.',
+  fast: 'Haiku. Choose for read-only lookups where a mistake is cheap to spot: search or list files, find where something is defined, read files, logs or test output and report what is there, run a command and report the result. Nothing is written or changed.',
   balanced:
-    'Sonnet. Choose when the logic is ordinary or already written down: carry out a detailed brief or plan step by step, implement a well-specified change across a few files, write tests for code that exists, fix a clearly described bug, review a small diff.',
-  deep: 'Opus. Choose when the work needs real judgment: design and architecture, a bug whose cause is unknown, security, data migrations, concurrency, anything touching production or money, or a problem whose approach is not written down.',
+    'Sonnet. Choose for read-only work that needs some understanding but writes nothing: summarize or explain code, research across many files, compare approaches, review a diff and report the findings.',
+  deep: 'Opus. Choose whenever the task writes or changes code or files, even a small, well-specified or mechanical change (it runs at a lower effort when the change is simple), and for work that needs real judgment: design, a bug whose cause is unknown, security, data migrations, production or money.',
 }
 
 /**
@@ -858,18 +854,14 @@ const STRATEGY_HOW: Record<Exclude<Strategy, 'direct'>, string> = {
   parallel:
     'Fan out, then join. Split the work into independent pieces that share no files, and start one subagent per piece in a single message, in the background, so they run at the same time. Give each a self-contained brief naming its files and how to check its piece. Then join here: read their reports, integrate, and run the tests once. Two pieces that touch the same file are one piece.',
   graph: [
-    'Sketch the graph in a few lines before starting, and keep it that small:',
-    '- Nodes: one subagent per independent part or real specialty (a builder per part; one read-only reviewer). A step you could do inline is not a node.',
-    '- Edges: parts with no dependency between them start together, in one message, in the background; a wave starts only when the parts it depends on are done, and joins here.',
-    '- Shared state: one plan file with each node\'s brief, files and status. Each node writes only its own section and its own files.',
-    '- Review: after each join, a separate read-only reviewer subagent checks the result against the plan and the tests. On a fail, send its findings back to the builder once, then decide here.',
-    '- Bounds: at most 4 subagents at a time and 2 review rounds per wave; a failed node is redone alone, without touching the others\' work.',
-    'If the graph cannot be explained in one breath, work directly instead.',
+    'Split the work into nodes, one subagent per independent part (a step you could do inline is not a node).',
+    'Nodes with no dependency between them start together, in one message, in the background; a dependent wave starts after its inputs join here.',
+    'Keep a plan file only if there are more than two waves. After the final join, one read-only reviewer checks the result against the tests; a failed node is redone alone.',
+    'At most 4 subagents at a time. If it cannot be explained in one breath, work directly.',
   ].join('\n'),
   junior: [
     'Junior and lead. Hand the coding to the jev-pilot:junior subagent (a cheaper model) with a self-contained brief: the files to change, the exact behavior, and the command that proves it. Do not write the code yourself first.',
-    'When it reports back, review it as the tech lead: read `git diff`, run the tests yourself, and check it did what was asked and nothing else.',
-    'If it falls short, send your findings back to the junior once (SendMessage), or fix small things yourself; do not rewrite what works.',
+    'Then review its work as the note about the crew says.',
   ].join('\n'),
 }
 
@@ -908,7 +900,7 @@ export function adviseStrategy(decision: Decision | null, config: StrategyConfig
       : STRATEGY_HOW[strategy]
   const block = [
     '<execution_strategy>',
-    `A fast decision model read this request as best carried out as: ${strategy} (confidence ${confidence.toFixed(2)}).`,
+    `A fast decision model read this request as best carried out as: ${strategy}.`,
     how,
     'It saw only the request and a few recent messages, not the code. If the actual work does not fit, ignore this and work directly.',
     '</execution_strategy>',
@@ -956,10 +948,10 @@ export function capabilityNote(on: Capabilities, crew: string[] = []): string | 
     )
   }
   if (on.skills) does.push('- attaches the one skill a request needs, if any')
-  if (on.strategy) does.push('- may attach an <execution_strategy> block: advice to weigh, not an order')
+  if (on.strategy) does.push('- may attach an <execution_strategy> block on how to carry the work out')
   if (on.quality) {
     does.push(
-      "- may attach a <jev_quality> block, its read of the request (vague, a bug, a costly area) with what to do about it: advice to weigh, not an order; and may add a note after a tool result when a turn goes in circles",
+      '- may attach a <jev_quality> block, its read of the request (vague, a bug, a costly area), and add a note after a tool result when a turn goes in circles',
     )
   }
   if (does.length === 0 && crew.length === 0) return null
@@ -967,8 +959,8 @@ export function capabilityNote(on: Capabilities, crew: string[] = []): string | 
   if (on.subagents) {
     leave.push(
       on.subagentEffort
-        ? "Leave subagents' model and effort to it: don't pin them in the Agent call, and don't create agent types only to fix a model or an effort, unless the user asks. Write each subagent's prompt as a clear, self-contained task; that is what it rates."
-        : "Leave subagents' model to it: don't pin one in the Agent call unless the user asks. Write each subagent's prompt as a clear, self-contained task; that is what it rates.",
+        ? "Leave subagents' model and effort to it: don't pin them in an Agent tool call (workflow scripts are the exception, see below), and don't create agent types only to fix a model or an effort, unless the user asks. Write each subagent's prompt as a clear, self-contained task; that is what it rates."
+        : "Leave subagents' model to it: don't pin one in an Agent tool call (workflow scripts are the exception, see below) unless the user asks. Write each subagent's prompt as a clear, self-contained task; that is what it rates.",
     )
   }
   if (on.effort) leave.push("Don't change the effort yourself unless the user asks.")
@@ -977,6 +969,7 @@ export function capabilityNote(on: Capabilities, crew: string[] = []): string | 
     ...(does.length > 0 ? ['jev-pilot is running in this session. Before each turn, a fast decision model reads the request and:', ...does] : ['jev-pilot is running in this session.']),
     ...leave,
     ...crew,
+    'Its blocks are advice: follow them where they fit the actual code.',
     'The user switches any part on or off with /jev.',
     '</jev_pilot>',
   ].join('\n')
@@ -1197,7 +1190,38 @@ export function spinOf(
   return null
 }
 
-/** What the model reads after the tool result that shows the circle. */
-export function stepBackNote(circle: string): string {
-  return `[jev-pilot] This turn may be going in circles: ${circle}. Step back before the next change: read the latest error or output in full, say in one line what you think is causing it, and try a different approach if the last ones didn't work.`
+/**
+ * What the model reads after the tool result that shows the circle. At
+ * xhigh or above it also names the next step Anthropic suggests for Opus
+ * 5.5: if xhigh hits the same problem twice, Fable 5.1 for that step, then
+ * back (a model switch costs a cache write, so it's the user's call).
+ */
+export function stepBackNote(circle: string, atTop = false): string {
+  const note = `[jev-pilot] This turn may be going in circles: ${circle}. Reconsider the cause from the latest error already above; if the last fixes didn't work, try a different approach rather than a variant.`
+  return atTop
+    ? `${note} This is already at high effort; if it stays stuck, suggest to the user switching to Fable for this step (/model fable, then back with /model once it's solved).`
+    : note
+}
+
+// --- where changing the effort costs the cache --------------------------------------
+
+/**
+ * Whether changing the effort mid-conversation clears the cached
+ * conversation. With an API key or a Claude subscription it keeps the cache
+ * (on Opus 5.5), so jev-pilot sets the effort per turn for free. On Amazon
+ * Bedrock, Google Cloud, or a gateway in front of the API, the effort is part
+ * of what the cache matches, and the next request pays the cache-write price
+ * on the whole conversation. `upstream` is where Claude requests really go
+ * (claude-jev's router passes them on), when that isn't Anthropic's API.
+ */
+export function effortClearsCache(env: { bedrock?: string; vertex?: string; upstream?: string }): boolean {
+  const on = (value: string | undefined) => !!value && !/^(0|false|no|off)?$/i.test(value.trim())
+  if (on(env.bedrock) || on(env.vertex)) return true
+  const upstream = env.upstream?.trim()
+  if (!upstream) return false
+  try {
+    return new URL(upstream).hostname !== 'api.anthropic.com'
+  } catch {
+    return false
+  }
 }
