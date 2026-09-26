@@ -406,6 +406,24 @@ test('a short reply that is not a question is a follow-up; a question is not', (
   }
 })
 
+test('Chinese is counted by its characters, not its spaces', () => {
+  // Written without spaces, a whole Chinese request split on spaces was one
+  // to four words, and a full-width ？ was not a question: every Chinese
+  // prompt read as a follow-up, so the effort was never lowered.
+  for (const reply of ['继续', '重试', '按照你的建议走', '好的，跑完直接跑首次全量', '可以，就这么改']) {
+    expect(isFollowUp(reply)).toBe(true)
+  }
+  for (const other of [
+    '帮我看一下这个函数为什么报错',
+    '这个配置是什么意思？',
+    '这个能用吗',
+    '请帮我重构整个认证模块，把 session 改成 JWT，并补上测试，注意兼容旧客户端的登录流程',
+    '把所有 API 路由的错误处理统一成一个中间件，然后更新对应的测试',
+  ]) {
+    expect(isFollowUp(other)).toBe(false)
+  }
+})
+
 test('a follow-up may raise the effort, never lower it', () => {
   const lowAnswer = { tier: 'fast' as const, confidence: 0.95, risky: 0, effort: 0, effortConfidence: 0.95, effortProbabilities: { '0': 0.95, '1': 0.05 } }
   expect(route(lowAnswer, { model: 'claude-opus-5-5', effort: 'medium' }, config).effort).toBe('low')
