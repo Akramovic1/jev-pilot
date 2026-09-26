@@ -284,9 +284,28 @@ export const EFFORT_INSTRUCTIONS =
  */
 export function isFollowUp(prompt: string): boolean {
   const text = prompt.trim()
-  if (!text || text.endsWith('?')) return false
+  if (!text || /[?？]$/.test(text)) return false
   if (/^(what|why|how|is|are|do|does|did|can|could|should|where|when|which|who)\b/i.test(text)) return false
-  return text.split(/\s+/).length <= 8
+  if (CJK_QUESTION.test(text)) return false
+  return wordCount(text) <= 8
+}
+
+/** Han and kana: written without spaces, so splitting on spaces sees one word. */
+const UNSPACED = /[぀-ヿ㐀-䶿一-鿿豈-﫿]/gu
+
+/** A Chinese question: a question word anywhere, or 吗/呢 closing it. */
+const CJK_QUESTION = /为什么|为啥|怎么|怎样|如何|什么|是不是|能不能|可不可以|有没有|是否|[吗呢][\s。.!！~～]*$/
+
+/**
+ * Words the way the eight-word bar counts them: runs of letters or digits
+ * between spaces, plus about one word per 1.5 Han or kana characters (the
+ * length of an English translation), so a long Chinese request is not one
+ * "word". Punctuation alone is not a word.
+ */
+export function wordCount(text: string): number {
+  const unspaced = text.match(UNSPACED)?.length ?? 0
+  const spaced = text.replace(UNSPACED, ' ').split(/\s+/).filter((token) => /[\p{L}\p{N}]/u.test(token)).length
+  return spaced + Math.ceil(unspaced / 1.5)
 }
 
 /**
