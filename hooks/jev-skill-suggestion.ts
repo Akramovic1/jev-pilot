@@ -87,6 +87,11 @@ import {
   commandLike,
   decide,
   pickSkill,
+  designQuestion,
+  readDesign,
+  DESIGN_BAR,
+  packSkills,
+  designBlock,
   describeRerank,
   describeSetup,
   describeStatus,
@@ -205,6 +210,9 @@ export const register: Register = (on, options) => {
   let announced = false
   // The setup hint, once per session.
   let hintedSetup = false
+  // The design pack's skills, and the tool names (for the screen libraries), read once.
+  const designSkillsOption = text('designSkills', 'design-taste-frontend, impeccable, web-design-guidelines')
+  let toolNames: string[] | null = null
 
   // A skill whose frontmatter `name:` has spaces ("PocketBase API Rules") is
   // reported by `$.command.list()` under that name, but the engine lists,
@@ -432,6 +440,7 @@ export const register: Register = (on, options) => {
     let parts: (Wide | null)[] = []
     let routerBlock: string | null = null
     let routerSettled = false
+    let designRead: number | null = null
     // The shortlist grows with the batches, so every batch's leaders reach
     // the rerank (their scores do not compare across batches).
     let picked: PolicyConfig = policy
@@ -444,11 +453,18 @@ export const register: Register = (on, options) => {
       const answers = await Promise.all(
         batches.map(async (batch, index) => {
           const questions = wideQuestions(active, batch, index === 0, withNone)
+          // UI design work? Asked in the same request, for the design pack.
+          if (index === 0 && feature('design')) questions.ui_design = designQuestion(active)
           const what = batches.length > 1 ? `ranking ${index + 1}/${batches.length}` : 'ranking'
-          if (index > 0 || !part) return ask(e.text, questions, what)
+          if (index > 0 || !part) {
+            const text = await ask(e.text, questions, what)
+            if (index === 0) designRead = readDesign(text)
+            return text
+          }
           const answer = await part.ask(questions)
           routerSettled = true
           routerBlock = await part.settle(answer)
+          designRead = readDesign(answer.text)
           return answer.text
         }),
       )
@@ -556,7 +572,21 @@ export const register: Register = (on, options) => {
     }
     // Attached on the way down, the router's advice first: blocks after the
     // prompt as typed, read by the model and never shown to the person.
-    const blocks = [routerBlock, block].filter((b): b is string => b !== null)
+    // UI design work: the design pack, with the design skills installed and
+    // the screen libraries connected.
+    let design: string | null = null
+    // (Set inside the request's callbacks above, which the compiler can't follow.)
+    const designScore = designRead as number | null
+    if (feature('design') && designScore !== null && designScore >= DESIGN_BAR) {
+      const skills = packSkills([...parseNames(designSkillsOption)], listedSkills.map((skill) => skill.name))
+      if (!toolNames) toolNames = (await $.tool.list().catch(() => [])).map((tool) => tool.name)
+      design = designBlock(skills, {
+        mobbin: toolNames.some((name) => name.startsWith('mcp__mobbin__')),
+        inspo: toolNames.some((name) => name.startsWith('mcp__inspo__')),
+      })
+      if (verbose) $.ui.log(`[jev-skill-suggestion] design work (${designScore.toFixed(2)}): ${skills.map((name) => `/${name}`).join(', ') || 'no design skills installed'}`)
+    }
+    const blocks = [routerBlock, block, design].filter((b): b is string => b !== null)
     if (blocks.length === 0) return next(e)
     return next({ ...e, context: [...(e.context ?? []), ...blocks] })
   })

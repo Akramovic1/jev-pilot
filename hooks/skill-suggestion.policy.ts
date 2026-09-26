@@ -1094,3 +1094,76 @@ export function setupAborted(reason: string): string {
 export function describeStillListed(count: number): string {
   return `${count} skill${count === 1 ? ' is' : 's are'} still listed for the model (withheld here, but /context counts them); run /${SETUP_COMMAND} to hand their selection to the mod for good`
 }
+
+// ---- the design pack: UI work gets the whole design toolkit ------------------------------
+
+/**
+ * Asked in the same one request: is this UI design work? Measured on 13
+ * prompts: design work (a landing page, a redesign, a mobile onboarding
+ * flow, "make it look premium", a card component) 0.95 to 0.98; everything
+ * else 0.09 at most, a UI bug ("the modal close button does nothing")
+ * included.
+ */
+export const DESIGN_BAR = 0.8
+
+export function designQuestion(provider: Provider): Record<string, unknown> {
+  const instructions =
+    'The request is to design, build or restyle something people see: a page, screen, component, layout, flow or visual style, for web or mobile, where how it looks and feels matters.'
+  return provider === 'gateway'
+    ? { type: 'boolean', instructions }
+    : {
+        type: 'noul',
+        instructions,
+        criteria: {
+          true: 'Visual or interaction design work: a landing page, a dashboard, a settings screen, a component, a redesign, a mobile screen or onboarding flow, styling, animation.',
+          false: 'No visible design involved: backend, data, tests, scripts, a bug in logic, docs, a question, or a UI change that is purely wiring (renaming a prop, fixing a handler).',
+        },
+      }
+}
+
+/** P(true) of the design question in an answer, or null when not asked or not answered. */
+export function readDesign(responseText: string | null): number | null {
+  if (!responseText) return null
+  try {
+    const answer = (JSON.parse(responseText) as { answers?: Record<string, { noul?: unknown; probability?: unknown }> }).answers?.ui_design
+    const value = typeof answer?.noul === 'number' ? answer.noul : answer?.probability
+    return typeof value === 'number' ? value : null
+  } catch {
+    return null
+  }
+}
+
+/** The design skills to name: the configured ones that are installed, by name or by a plugin's `plugin:name`. */
+export function packSkills(configured: readonly string[], installed: readonly string[]): string[] {
+  return configured.flatMap((want) => {
+    const hit = installed.find((name) => name === want) ?? installed.find((name) => name.endsWith(`:${want}`))
+    return hit ? [hit] : []
+  })
+}
+
+/** Where to take a design direction from: real products' DESIGN.md files, collected by VoltAgent. */
+export const DESIGN_MD = {
+  index: 'https://github.com/VoltAgent/awesome-design-md/tree/main/design-md',
+  raw: 'https://raw.githubusercontent.com/VoltAgent/awesome-design-md/main/design-md/<site>/DESIGN.md',
+  examples: 'linear.app, stripe, vercel, notion, apple, airbnb, spotify, raycast, cursor, supabase',
+}
+
+/**
+ * The block for UI design work: the design skills installed (the first ones
+ * for direction and polish, the guidelines one to check against), where to
+ * take a direction from, and the screen libraries connected. The project's
+ * own design system comes first. Advice, kept short (prompt-audit).
+ */
+export function designBlock(skills: readonly string[], sources: { mobbin: boolean; inspo: boolean }): string {
+  const guidelines = skills.filter((name) => /web-design-guidelines$/.test(name))
+  const craft = skills.filter((name) => !guidelines.includes(name))
+  const lines = ['<jev_design>', 'This is UI design work. The user wants it done with their design toolkit:']
+  if (craft.length > 0) lines.push(`- Load ${craft.map((name) => `/${name}`).join(' and ')} (Skill tool) for the direction and the polish.`)
+  if (guidelines.length > 0) lines.push(`- Before calling it done, check it against /${guidelines[0]} (on mobile, also the platform's own conventions).`)
+  const libraries = [sources.mobbin ? 'the Mobbin MCP (search_screens, search_flows) for real app screens and flows' : '', sources.inspo ? 'the Inspo MCP for real websites' : ''].filter(Boolean)
+  lines.push(
+    `- Direction: follow the project's design system or tokens if it has them. Otherwise take one from a real product: a DESIGN.md from awesome-design-md (${DESIGN_MD.raw}, sites such as ${DESIGN_MD.examples}; all of them at ${DESIGN_MD.index})${libraries.length > 0 ? `, or ${libraries.join(' and ')}` : ''}.`,
+  )
+  lines.push('</jev_design>')
+  return lines.join('\n')
+}

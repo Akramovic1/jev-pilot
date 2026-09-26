@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.11.0 — 2026-09-26
+
+**The design pack.** UI design work gets your whole design toolkit, not just one skill.
+
+- The same one Jev request now also asks whether a request is UI design work (web or mobile). Measured on 13 prompts: design requests (a landing page, a redesign, a mobile onboarding flow, "make it look premium", a card component) scored 0.95 to 0.98; everything else 0.09 at most, including a UI bug that is logic, not design. The bar is 0.8.
+- When it is, Claude gets a `<jev_design>` block: load the design skills for direction and polish (`designSkills`, default `design-taste-frontend, impeccable`), check the result against `web-design-guidelines` before calling it done, and take a direction from the project's own design system first, else from a real product's DESIGN.md in VoltAgent's awesome-design-md, or from real screens through the Mobbin MCP (and Inspo) when connected. Only installed skills and connected tools are named.
+- New switch `/jev design on|off` and options `designPack`, `designSkills`.
+
 ## 0.10.2 — 2026-09-26
 
 - **No more moving pixel.** The scarf's loose end stuck out one pixel past the body and dipped every few seconds, which read as a glitch. It's gone: the scarf ends with the body and nothing flaps. The wind timer that drove it is removed too, so a resting pilot redraws only to blink and play. The README's pet images are regenerated.

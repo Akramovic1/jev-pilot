@@ -190,6 +190,12 @@ The questions were tuned on sample prompts. For example, a first wording rated "
 - **A turn going in circles.** When the same file is edited 4 times in a turn, or the same command fails a third time, Claude gets a note after that tool call (you don't see it): step back, read the error in full, say what's causing it, and try something else. The effort goes up a level, once. Before, only tool calls failing back to back raised it, and the edit, test, edit, test loop never does that.
 - `/jev quality off` switches all of this off. It costs no extra wait: the questions ride in the same request.
 
+**UI design work gets the design pack.** When Jev reads a request as UI design (a page, a screen, a component, a redesign, a mobile flow; measured: design requests 0.95 to 0.98, everything else 0.09 at most, a UI bug included), Claude is told to:
+- load your design skills (`designSkills`, by default `design-taste-frontend` and `impeccable`) for the direction and polish, and check the result against `web-design-guidelines` before calling it done. Only the ones you have installed are named;
+- follow the project's own design system first; otherwise take a direction from a real product's DESIGN.md in [awesome-design-md](https://github.com/VoltAgent/awesome-design-md) (Linear, Stripe, Vercel, Notion, Apple, Airbnb…), or from real app screens with the Mobbin MCP (and Inspo), when those are connected.
+
+It rides in the same one request. `/jev design off` switches it off.
+
 **One request per prompt.** The effort, model, strategy and skill questions all go to Jev together, in one request of about 0.5 s. Before 0.6 there were three requests one after another: effort and strategy, the skill ranking, then a re-check of the top skills, about 1.5 s in all. On 16 test prompts the single request picked the same skill 14 times, and the other two picks were better. A plain "continue" asks nothing: the work goes on as the last turn decided. (Catalogs over the API's 255-choice limit are ranked in parallel batches, so it's still one wait.) `/jev-pilot:setup` can hide your own skills from Claude's skill list entirely (it asks first; `restore` undoes it).
 
 ## 🛩️ Meet the pilot
@@ -220,7 +226,7 @@ Everything is on by default except switching the main conversation's model. Type
 
 ```
 /jev                    what is on
-/jev skills off         one switch: effort · raise · subagents · skills · strategy · quality · model · pet
+/jev skills off         one switch: effort · raise · subagents · skills · strategy · quality · design · model · pet
 /jev all off            every switch (all on turns them back on)
 /jev reset              back to your settings' defaults
 ```

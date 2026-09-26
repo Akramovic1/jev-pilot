@@ -27,6 +27,7 @@ export const register: Register = (on, options) => {
     skills: flag('suggestSkills', true),
     strategy: flag('suggestStrategy', true),
     quality: flag('qualityAdvice', true),
+    design: flag('designPack', true),
     model: flag('routeMainModel', false),
     pet: display === 'pet' || display === 'both',
   })

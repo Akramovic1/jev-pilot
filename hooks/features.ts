@@ -6,9 +6,9 @@
  * Shared: the modules run in the plugin's one worker, so they all read these.
  */
 
-export type Feature = 'effort' | 'raise' | 'subagents' | 'skills' | 'strategy' | 'quality' | 'model' | 'pet'
+export type Feature = 'effort' | 'raise' | 'subagents' | 'skills' | 'strategy' | 'quality' | 'design' | 'model' | 'pet'
 
-export const FEATURES: readonly Feature[] = ['effort', 'raise', 'subagents', 'skills', 'strategy', 'quality', 'model', 'pet']
+export const FEATURES: readonly Feature[] = ['effort', 'raise', 'subagents', 'skills', 'strategy', 'quality', 'design', 'model', 'pet']
 
 /** What each switch does, for `/jev`. */
 export const FEATURE_INFO: Record<Feature, string> = {
@@ -18,6 +18,7 @@ export const FEATURE_INFO: Record<Feature, string> = {
   skills: 'picks the one skill a prompt needs (off: the full skill list stays)',
   strategy: 'advises splitting big work across subagents',
   quality: 'asks before guessing, tests bugs first, checks costly changes, and steps back when a turn goes in circles',
+  design: 'gives UI design work your design skills, a real product\u2019s DESIGN.md or Mobbin screens for direction, and the web guidelines to check against',
   model: 'switches the main conversation’s model (resets the prompt cache)',
   pet: 'shows Claude the pilot above the prompt',
 }
@@ -29,6 +30,7 @@ let defaults: Record<Feature, boolean> = {
   skills: true,
   strategy: true,
   quality: true,
+  design: true,
   model: false,
   pet: true,
 }

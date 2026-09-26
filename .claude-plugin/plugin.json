@@ -1,6 +1,6 @@
 {
   "name": "jev-pilot",
-  "version": "0.10.2",
+  "version": "0.11.0",
   "description": "TypeSafe's Jev decides how Claude Code works on each prompt: the main conversation's reasoning effort (low to xhigh, raised to max mid-turn when tool calls keep failing), each subagent's model, whether to split the work across subagents, and the one skill the prompt needs. Brings in custom OpenRouter models (a junior coder reviewed by Opus, or cheap bulk work) and Codex or OpenCode as reviewers, in modes you choose, each health-checked. Reads the prompt with recent context, records every decision, and suggests its own tuning. Backends: OpenRouter, TypeSafe's API, the Vercel AI Gateway, or Claude Code's built-in classifier. Built on claude-code-templates' jev-model-router and jev-skill-suggestion.",
   "author": {
     "name": "Ahmed Akram",
@@ -289,6 +289,18 @@
       "title": "Quality advice",
       "description": "Jev also reads each request for what makes the work better: a vague request (ask or state an assumption first), a bug (show it with a failing test first), a costly area such as money, auth or migrations (test it, and get a review when a reviewer is set up); marks your corrections in the ledger; and tells Claude to step back when a turn edits the same file or runs the same command over and over. /jev quality on|off switches it live",
       "default": true
+    },
+    "designPack": {
+      "type": "boolean",
+      "title": "Design pack",
+      "description": "When Jev reads a request as UI design work (web or mobile), tell Claude to load your design skills (designSkills), take a direction from the project's design system or a real product's DESIGN.md (awesome-design-md) or Mobbin screens, and check the result against the web guidelines. /jev design on|off switches it live",
+      "default": true
+    },
+    "designSkills": {
+      "type": "string",
+      "title": "Design skills",
+      "description": "Comma-separated skills the design pack names, when installed: the last one ending in web-design-guidelines is the one to check against; the others give the direction and polish",
+      "default": "design-taste-frontend, impeccable, web-design-guidelines"
     },
     "suggestSkills": {
       "type": "boolean",
