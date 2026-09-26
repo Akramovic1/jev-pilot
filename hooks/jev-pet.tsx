@@ -45,7 +45,6 @@ import {
   MOOD_COLOR,
   PLAY_FRAMES,
   PLAYS,
-  SCARF_CYCLE,
   sceneRows,
   setBoost,
   WORK_ACTS,
@@ -57,7 +56,6 @@ const FLY_MS = 200
 // goggles down, at a calmer rate; running agents are checked this often.
 const CRUISE_MS = 450
 const AGENTS_EVERY_MS = 1500
-const WIND_MS = 1000
 const BLINK_EVERY_MS = 4600
 const BLINK_MS = 170
 const PLAY_EVERY_MS = 9000
@@ -76,8 +74,6 @@ export const register: Register = (on, options) => {
   let player: Timer | null = null
   let playing: Timer | null = null
   let plays = 0
-  let wind = 0
-  let breeze: Timer | null = null
   let cruising: Timer | null = null
   let watcher: Timer | null = null
   // The main loop's tool calls in flight, each with the act it shows.
@@ -116,16 +112,6 @@ export const register: Register = (on, options) => {
         blink = false
         $.ui.invalidate('ui.render')
       })
-    })
-    // The scarf's end dips in the wind, one step in SCARF_CYCLE. (Working or
-    // playing, the frame timer redraws anyway; resting, only a dip and its
-    // return redraw.)
-    breeze?.cancel()
-    breeze = $.clock.every(WIND_MS, () => {
-      if (!feature('pet')) return
-      wind++
-      const step = wind % SCARF_CYCLE
-      if (!workingTurn && !playing && !cruising && (step === SCARF_CYCLE - 1 || step === 0)) $.ui.invalidate('ui.render')
     })
     // Idle play: every few seconds one of the plays, in turn, for a moment.
     player?.cancel()
@@ -390,7 +376,7 @@ export const register: Register = (on, options) => {
     const speech = currentSpeech()
     const color = MOOD_COLOR[speech.mood]
     // Goggles down when flying, and at full power (effort raised to max).
-    const rows = sceneRows(act, frame, blink, wind, act === 'fly' || isBoosted())
+    const rows = sceneRows(act, frame, blink, frame, act === 'fly' || isBoosted())
     const working = (WORK_ACTS as readonly Act[]).includes(act)
     const text = working ? `${SPINNER[frame % SPINNER.length]} ${ACT_LABEL[act as (typeof WORK_ACTS)[number]]} · ${speech.text}` : speech.text
     return (

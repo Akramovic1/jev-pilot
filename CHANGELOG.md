@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.2 — 2026-09-26
+
+- **No more moving pixel.** The scarf's loose end stuck out one pixel past the body and dipped every few seconds, which read as a glitch. It's gone: the scarf ends with the body and nothing flaps. The wind timer that drove it is removed too, so a resting pilot redraws only to blink and play. The README's pet images are regenerated.
+
 ## 0.10.1 — 2026-09-26
 
 - **The pilot keeps its shape.** A long bubble (a long skill name mid-turn, in a narrow terminal) squeezed the pilot's column, so each of its rows wrapped onto two lines and the drawing came apart. The pilot now has a fixed width that never shrinks; the bubble gives way and cuts its text instead. Checked live at 60 columns mid-turn.

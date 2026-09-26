@@ -9,7 +9,7 @@ import {
   parseJevCommand,
   setFeature,
 } from '../hooks/features.ts'
-import { type Act, actOfTool, BODY_W, CANVAS_H, subagentLabel, PALETTE, SCARF_CYCLE, CANVAS_W, PLAY_FRAMES, PLAYS, scenePixels, sceneRows, turnSpeech } from '../hooks/pet-art.ts'
+import { type Act, actOfTool, BODY_W, CANVAS_H, subagentLabel, PALETTE, CANVAS_W, PLAY_FRAMES, PLAYS, scenePixels, sceneRows, turnSpeech } from '../hooks/pet-art.ts'
 
 const allOn = { effort: true, raise: true, subagents: true, skills: true, strategy: true, quality: true, model: false, pet: true }
 
@@ -72,16 +72,13 @@ test('the pet is Claude the pilot: goggles, eyes, scarf, flames; no flames while
   for (let beat = 0; beat < 4; beat++) expect(scenePixels('rope', beat).join('')).not.toMatch(/[Ff]/)
 })
 
-test('the scarf end mostly hangs still, dipping one wind step in five', () => {
+test('the scarf never moves, and no pixel of it sticks out past the body', () => {
   const at = (wind: number) => scenePixels('rest', 0, false, wind)
-  const still = at(0)
-  for (let wind = 1; wind < SCARF_CYCLE - 1; wind++) expect(at(wind)).toEqual(still)
-  const dipped = at(SCARF_CYCLE - 1)
-  expect(dipped).not.toEqual(still)
-  expect(at(SCARF_CYCLE)).toEqual(still)
-  // Only the scarf's end moves: the same count of scarf pixels.
-  const count = (pixels: string[]) => (pixels.join('').match(/S/g) ?? []).length
-  expect(count(dipped)).toBe(count(still))
+  for (let wind = 1; wind < 10; wind++) expect(at(wind)).toEqual(at(0))
+  // The scarf row ends where the body does: nothing past the body's right edge.
+  const scarfRow = at(0).find((row) => row.includes('S')) as string
+  const bodyRow = at(0).find((row) => /C{12}/.test(row)) as string
+  expect(scarfRow.lastIndexOf('S')).toBeLessThan(bodyRow.lastIndexOf('C'))
 })
 
 test('the flames hold their colors: resting they never change, flying only their length does', () => {
@@ -109,12 +106,10 @@ test('every frame of every act is the same size, five lines tall', () => {
 })
 
 test('each act moves: its frames differ within a loop and repeat after it', () => {
-  // A loop runs until the act and the scarf's flap line up again
-  // (flying: the bob, two frames).
-  const lcm = (a: number, b: number): number => (a * b) / (function gcd(x: number, y: number): number { return y ? gcd(y, x % y) : x })(a, b)
+  // A loop is the act's own frames (flying: the bob, two frames).
   const loops: Record<string, number> = { fly: 2, think: 8, read: 4, search: 4, write: 12, run: 10, ...PLAY_FRAMES }
   for (const act of ['fly', 'think', 'read', 'search', 'write', 'run', ...PLAYS] as Act[]) {
-    const n = lcm(loops[act] as number, SCARF_CYCLE)
+    const n = loops[act] as number
     const frames = Array.from({ length: n }, (_, f) => scenePixels(act, f).join('\n'))
     expect(new Set(frames).size).toBeGreaterThan(1)
     expect(scenePixels(act, n)).toEqual(scenePixels(act, 0))

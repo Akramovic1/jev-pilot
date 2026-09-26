@@ -138,8 +138,8 @@ export const PALETTE: Record<string, string> = {
  * The pilot: Claude Code's character (the same pilot as the README banner and
  * the demo video) at 3/4 of the banner's 16x12, every part kept: goggles
  * pushed up on the forehead (pulled down over the eyes to fly), their lenses
- * glinting, the head, two-pixel eyes, both rows of arms, a teal scarf with
- * its loose end, long legs, and the jet flames under them.
+ * glinting, the head, two-pixel eyes, both rows of arms, a teal scarf, long
+ * legs, and the jet flames under them.
  */
 const CLAWD = [
   '.GWLGGGGWLG.',
@@ -147,7 +147,7 @@ const CLAWD = [
   '.CCECCCCECC.',
   'CCCECCCCECCC',
   'CCCCCCCCCCCC',
-  '.SSSSSSSSSSS',
+  '.SSSSSSSSSS.',
   '..C.C..C.C..',
   '..C.C..C.C..',
 ]
@@ -270,33 +270,18 @@ function clawdFor(act: Act, frame: number, blink: boolean, goggles: boolean): st
   return rows
 }
 
-/** How many wind steps a scarf flap takes: still for all but the last. */
-export const SCARF_CYCLE = 5
-
 /**
- * The scarf's loose end in the wind: still most of the time, dipping for one
- * step in `SCARF_CYCLE`. `sx, sy` is where the end sits when still.
- */
-function flapScarf(grid: Grid, sx: number, sy: number, wind: number): void {
-  if (wind % SCARF_CYCLE !== SCARF_CYCLE - 1) return
-  dot(grid, sx, sy, '.')
-  dot(grid, sx, sy + 1, 'S')
-}
-
-/**
- * The pixel canvas for one frame of one act. `wind` flaps the scarf's end
- * (by default in step with the frames; resting, the pet passes its own).
- * `goggles` pulls them down over the eyes: always when flying.
+ * The pixel canvas for one frame of one act. `wind` is no longer used (the
+ * scarf's end that flapped in it is gone) and is kept only so callers need
+ * not change. `goggles` pulls them down over the eyes: always when flying.
  */
 export function scenePixels(act: Act, frame = 0, blink = false, wind = frame, goggles = act === 'fly'): string[] {
   const grid = blank()
   const clawd = clawdFor(act, frame, blink, goggles)
   const X = 1
-  const scarf = (top: number) => flapScarf(grid, X + 11, top + 5, wind)
   if (act === 'fly') {
     // Flying: a bob, down a pixel on the short flame.
     paste(grid, clawd, X, frame % 2)
-    scarf(frame % 2)
   } else if (act === 'rope') {
     // Four beats: the rope overhead, coming down in front, under the feet
     // (the pilot up in the air), coming round behind.
@@ -304,7 +289,6 @@ export function scenePixels(act: Act, frame = 0, blink = false, wind = frame, go
     const lift = beat === 2 ? 2 : beat === 1 ? 1 : 0
     const top = CANVAS_H - clawd.length - lift
     paste(grid, clawd, X, top)
-    scarf(top)
     const hands = top + 3
     const right = BODY_W - 1
     if (beat === 0) {
@@ -320,7 +304,6 @@ export function scenePixels(act: Act, frame = 0, blink = false, wind = frame, go
     }
   } else {
     paste(grid, clawd, X, CANVAS_H - clawd.length)
-    scarf(CANVAS_H - clawd.length)
     drawProp(grid, act, frame)
   }
   return grid.map((row) => row.join(''))
