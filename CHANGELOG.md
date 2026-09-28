@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.11.1 — 2026-09-29
+
+- **A model you ask for is the model you get.** When a subagent was started with a model named (for example "run the builders on Sonnet 5.5"), jev-pilot still re-picked it, and since 0.10 it sent any code-writing subagent to Opus. Now a `model` set on the Agent call is kept, in quality mode too; Jev still sets that subagent's reasoning effort. With no model named, Jev picks as before. The note Claude gets at the start of a session says so, and asks it to name a model only when you asked for one.
+
 ## 0.11.0 — 2026-09-26
 
 **The design pack.** UI design work gets your whole design toolkit, not just one skill.

@@ -252,3 +252,19 @@ test('on Bedrock, where changing effort clears the cache, a struggling turn is n
   // Held: every request keeps the session's effort, failures or not.
   expect(efforts).toEqual(['medium', 'medium', 'medium'])
 })
+
+test('a model the caller names for a subagent is kept; with none named, Jev picks', async ($, on) => {
+  world(on, 'deep', () => [])
+  const ran: (string | undefined)[] = []
+  // Beneath the plugins, the engine starts the subagent on the model it is handed.
+  on('agent.spawn', async (_$, e) => {
+    ran.push(e.model)
+    return { model: e.model ?? 'claude-opus-5-5', agentId: `a${ran.length}` }
+  })
+  const base = { prompt: 'implement the retry queue in src/queue.ts and its tests', description: 'build queue', subagentType: 'general-purpose' }
+  await $.agent.spawn({ ...base, model: 'sonnet' } as never)
+  await $.agent.spawn({ ...base, model: 'haiku' } as never)
+  await $.agent.spawn({ ...base, parentModel: 'claude-sonnet-5-5' } as never)
+  // Named: kept, even where Jev reads the work as deep. Unnamed: Jev's tier.
+  expect(ran).toEqual(['sonnet', 'haiku', 'opus'])
+})

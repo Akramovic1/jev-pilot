@@ -1080,8 +1080,12 @@ export const register: Register = (on, options) => {
       return spawned
     }
 
+    // A model the caller named is kept: asked for by the user, or chosen on
+    // purpose by the main model. Jev still sets the subagent's effort.
+    const named = e.model ?? null
+
     // Quality mode: Opus for every subagent, no cheaper models.
-    if (crew().mode === 'quality') {
+    if (crew().mode === 'quality' && !named) {
       if (verbose) $.ui.log(`[jev-model-router] ${e.subagentType}: quality mode, ${policy.tiers.deep}`)
       return next({ ...e, model: policy.tiers.deep })
     }
@@ -1135,7 +1139,10 @@ export const register: Register = (on, options) => {
     // A custom model: moving down to it takes the same confidence as any
     // cheaper model; the router sends `jev-<slot>` to it.
     const slot = decision?.slot ? offered.find((choice) => choice.name === decision.slot) : undefined
-    if (slot) {
+    if (named) {
+      model = null
+      reason = `the caller named ${named}`
+    } else if (slot) {
       const sure = (decision?.confidence ?? 0) >= policy.minDowngradeConfidence
       model = sure ? slotAlias(slot.name) : null
       reason = sure ? `${slot.name}: ${slot.model} (confidence ${decision?.confidence?.toFixed(2)})` : `${slot.name} wanted, confidence ${decision?.confidence?.toFixed(2)} < ${policy.minDowngradeConfidence}`

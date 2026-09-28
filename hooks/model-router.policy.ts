@@ -943,8 +943,8 @@ export function capabilityNote(on: Capabilities, crew: string[] = []): string | 
   if (on.subagents) {
     does.push(
       on.subagentEffort
-        ? "- sets each subagent's model (haiku, sonnet or opus) and its reasoning effort, from the task in its prompt"
-        : "- sets each subagent's model (haiku, sonnet or opus), from the task in its prompt",
+        ? "- sets each subagent's model (haiku, sonnet or opus) and its reasoning effort, from the task in its prompt; a `model` set on the Agent call is kept, so set one only when the user asked for a specific model"
+        : "- sets each subagent's model (haiku, sonnet or opus), from the task in its prompt; a `model` set on the Agent call is kept, so set one only when the user asked for a specific model",
     )
   }
   if (on.skills) does.push('- attaches the one skill a request needs, if any')
