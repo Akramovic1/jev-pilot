@@ -2,6 +2,8 @@ import { expect, test } from 'bun:test'
 import { NOT_A_TASK, recentContext } from '../hooks/context.ts'
 import type { ContextMessage } from '../hooks/context.ts'
 import {
+  capabilityNote,
+  CHECK_AT_LOW,
   adviseStrategy,
   EFFORT_ORDER,
   effortLevel,
@@ -296,12 +298,21 @@ test('every effort option says when to choose it, one per rung', () => {
   for (const when of Object.values(options)) expect(when.length).toBeGreaterThan(40)
 })
 
-test('Haiku and Sonnet only read; any subagent that writes code stays on Opus (Anthropic\'s guidance for Opus 5.5)', () => {
+test('Haiku only reads; Sonnet also takes code with a clear spec and a check; Opus the judgment and long work (building with Sonnet 5.5)', () => {
   const tiers = (questions('openrouter').tier as { type: string; criteria: Record<string, string> }).criteria
   expect(tiers.fast).toMatch(/^Haiku\. Choose for read-only lookups/)
   expect(tiers.fast).toContain('Nothing is written or changed')
   expect(tiers.balanced).toMatch(/^Sonnet\. Choose for read-only work/)
-  expect(tiers.deep).toMatch(/^Opus\. Choose whenever the task writes or changes code or files/)
+  expect(tiers.balanced).toContain('code changes with a clear spec and a way to check the result')
+  expect(tiers.deep).toMatch(/^Opus\. Choose for work that needs careful judgment or runs long/)
+  expect(tiers.deep).toContain('a bug whose cause is unknown')
+})
+
+test('the note to the main conversation carries the low-effort check, and says a named model is kept', () => {
+  const note = capabilityNote({ effort: true, raise: true, model: false, subagents: true, subagentEffort: true, skills: true, strategy: true, quality: true } as never) as string
+  expect(note).toContain('At low effort too: when you change code that can be run, built, or type-checked, run a real check')
+  expect(note).toContain('a model you set is kept')
+  expect(CHECK_AT_LOW).toBe('When you change code that can be run, built, or type-checked, run a real check that exercises the change before reporting it done.')
 })
 
 test('an effort answer given as a choice reads as probabilities by rung, with their mean as the score', () => {

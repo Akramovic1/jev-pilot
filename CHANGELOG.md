@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.12.0 — 2026-09-29
+
+**Sonnet 5.5 takes well-specified code.** Following Anthropic's "Building with Claude Sonnet 5.5": Sonnet 5.5 fits best "when the task has a clear spec and a way to check the result", and Opus stays the choice for careful judgment and long-horizon work.
+
+- The tiers Jev chooses from are rewritten. Sonnet now also takes code changes with a clear spec and a check (a known-cause fix, a feature to a written spec, tests, a scoped refactor). Opus takes design, open specs, unknown causes, long multi-step builds, security, migrations, production and money. Before, from 0.10, every code-writing subagent stayed on Opus.
+- Measured on 40 real subagent briefs: 16 moved to Sonnet 5.5 (review-finding fixes, bug fixes and scoped builds, each with tests named). The big milestone builds and all reviews stayed on Opus. Moving down still needs Jev at least 60% sure.
+- At `low` effort, Sonnet 5.5 sometimes skips the check that exercises a change. A subagent brief that will run at low and may change code now ends with Anthropic's line for it: "When you change code that can be run, built, or type-checked, run a real check that exercises the change before reporting it done." The main conversation gets the same line once, in jev-pilot's session note.
+- The session note's wording on named models is folded into one sentence.
+
 ## 0.11.1 — 2026-09-29
 
 - **A model you ask for is the model you get.** When a subagent was started with a model named (for example "run the builders on Sonnet 5.5"), jev-pilot still re-picked it, and since 0.10 it sent any code-writing subagent to Opus. Now a `model` set on the Agent call is kept, in quality mode too; Jev still sets that subagent's reasoning effort. With no model named, Jev picks as before. The note Claude gets at the start of a session says so, and asks it to name a model only when you asked for one.

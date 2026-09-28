@@ -187,8 +187,8 @@ export const TIER_ORDER: readonly Tier[] = ['fast', 'balanced', 'deep']
 const TIER_CRITERIA: Record<Tier, string> = {
   fast: 'Haiku. Choose for read-only lookups where a mistake is cheap to spot: search or list files, find where something is defined, read files, logs or test output and report what is there, run a command and report the result. Nothing is written or changed.',
   balanced:
-    'Sonnet. Choose for read-only work that needs some understanding but writes nothing: summarize or explain code, research across many files, compare approaches, review a diff and report the findings.',
-  deep: 'Opus. Choose whenever the task writes or changes code or files, even a small, well-specified or mechanical change (it runs at a lower effort when the change is simple), and for work that needs real judgment: design, a bug whose cause is unknown, security, data migrations, production or money.',
+    'Sonnet. Choose for read-only work that needs some understanding (summarize or explain code, research across many files, review a diff and report the findings), and for code changes with a clear spec and a way to check the result: the brief says what to change and a test, build or type check shows it works, such as a bug fix whose cause is known, a feature to a written spec, tests for existing code, or a scoped refactor.',
+  deep: 'Opus. Choose for work that needs careful judgment or runs long: design, a change whose spec is open or that nothing can check, a bug whose cause is unknown, long multi-step work across many components, security, data migrations, production or money.',
 }
 
 /**
@@ -930,6 +930,14 @@ export interface Capabilities {
  * effort) nor tells the user jev-pilot cannot do what it does. Only the parts
  * switched on are named; null when none is.
  */
+/**
+ * Anthropic's line for low effort (building with Sonnet 5.5): at `low`, a
+ * model sometimes skips the check that exercises a change. Given to the main
+ * conversation once, and appended to a subagent's brief that runs at low.
+ */
+export const CHECK_AT_LOW =
+  'When you change code that can be run, built, or type-checked, run a real check that exercises the change before reporting it done.'
+
 export function capabilityNote(on: Capabilities, crew: string[] = []): string | null {
   const does: string[] = []
   if (on.effort) {
@@ -943,8 +951,8 @@ export function capabilityNote(on: Capabilities, crew: string[] = []): string | 
   if (on.subagents) {
     does.push(
       on.subagentEffort
-        ? "- sets each subagent's model (haiku, sonnet or opus) and its reasoning effort, from the task in its prompt; a `model` set on the Agent call is kept, so set one only when the user asked for a specific model"
-        : "- sets each subagent's model (haiku, sonnet or opus), from the task in its prompt; a `model` set on the Agent call is kept, so set one only when the user asked for a specific model",
+        ? "- sets each subagent's model (haiku, sonnet or opus) and its reasoning effort, from the task in its prompt"
+        : "- sets each subagent's model (haiku, sonnet or opus), from the task in its prompt",
     )
   }
   if (on.skills) does.push('- attaches the one skill a request needs, if any')
@@ -959,11 +967,14 @@ export function capabilityNote(on: Capabilities, crew: string[] = []): string | 
   if (on.subagents) {
     leave.push(
       on.subagentEffort
-        ? "Leave subagents' model and effort to it: don't pin them in an Agent tool call (workflow scripts are the exception, see below), and don't create agent types only to fix a model or an effort, unless the user asks. Write each subagent's prompt as a clear, self-contained task; that is what it rates."
-        : "Leave subagents' model to it: don't pin one in an Agent tool call (workflow scripts are the exception, see below) unless the user asks. Write each subagent's prompt as a clear, self-contained task; that is what it rates.",
+        ? "Leave subagents' model and effort to it: don't pin them in an Agent tool call (workflow scripts are the exception, see below), and don't create agent types only to fix a model or an effort, unless the user asks; a model you set is kept. Write each subagent's prompt as a clear, self-contained task; that is what it rates."
+        : "Leave subagents' model to it: don't pin one in an Agent tool call (workflow scripts are the exception, see below) unless the user asks; a model you set is kept. Write each subagent's prompt as a clear, self-contained task; that is what it rates.",
     )
   }
-  if (on.effort) leave.push("Don't change the effort yourself unless the user asks.")
+  if (on.effort) {
+    leave.push("Don't change the effort yourself unless the user asks.")
+    leave.push(`At low effort too: ${CHECK_AT_LOW.charAt(0).toLowerCase()}${CHECK_AT_LOW.slice(1)}`)
+  }
   return [
     '<jev_pilot>',
     ...(does.length > 0 ? ['jev-pilot is running in this session. Before each turn, a fast decision model reads the request and:', ...does] : ['jev-pilot is running in this session.']),

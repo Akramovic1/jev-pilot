@@ -69,7 +69,7 @@ import type { ContextMessage } from './context.ts'
 import { appendEntry, configKeysOf, entriesOf, LEDGER_KEY, markCorrected, reportPrompt, suggestions, summarize } from './ledger.ts'
 import { dueToPropose, effective, initTuning, setTuning, TUNING_KEY, tuningLoaded, tuningOf } from './tuning.ts'
 import type { LedgerEntry, TunableConfig } from './ledger.ts'
-import { effortClearsCache, QUALITY_BARS, qualityAdvice, spinOf, stepBackNote } from './model-router.policy.ts'
+import { CHECK_AT_LOW, effortClearsCache, QUALITY_BARS, qualityAdvice, spinOf, stepBackNote } from './model-router.policy.ts'
 import {
   adviseStrategy,
   EFFORT_ORDER,
@@ -1160,7 +1160,12 @@ export const register: Register = (on, options) => {
         $.ui.invalidate('ui.render')
       }
     }
-    const result = await next(model ? { ...e, model } : e)
+    // A brief that will run at low effort and may change code gets Anthropic's
+    // line for low effort: at `low` the check that exercises a change can be skipped.
+    const low =
+      routeSubagentEffort() && decision !== null && decision.tier !== 'fast' && effortLevel(effortScoreOf(decision, margin) ?? 1) === 'low'
+    const brief = low && !e.prompt.includes(CHECK_AT_LOW) ? { prompt: `${e.prompt}\n\n${CHECK_AT_LOW}` } : {}
+    const result = await next({ ...e, ...(model ? { model } : {}), ...brief })
     recordSubagent(result.agentId, model ?? current ?? null, e.parentModel ?? current)
     if (decision && result.agentId && routeSubagentEffort()) {
       subagents.set(result.agentId, { decision, label, model: model ?? null })
