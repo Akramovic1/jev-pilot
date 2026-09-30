@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.12.1 — 2026-09-30
+
+- **Chinese prompts can lower the reasoning effort.** Requests written without spaces were counted as short follow-ups, preventing Jev from lowering effort even when its decision was confident. Han and kana characters now contribute to the length estimate, and Chinese question words, question endings and full-width question marks are recognized. Short replies such as `继续` and `重试` still keep the current effort as a floor.
+- Added regression coverage for Chinese questions, longer requests, mixed Chinese and English text, and short follow-ups. Thanks to [@alexcz-a11y](https://github.com/alexcz-a11y) for reporting and fixing this in [#1](https://github.com/Akramovic1/jev-pilot/pull/1).
+
 ## 0.12.0 — 2026-09-29
 
 **Sonnet 5.5 takes well-specified code.** Following Anthropic's "Building with Claude Sonnet 5.5": Sonnet 5.5 fits best "when the task has a clear spec and a way to check the result", and Opus stays the choice for careful judgment and long-horizon work.
