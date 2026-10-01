@@ -8,6 +8,8 @@
  * than a classifier needs and more than should leave the machine.
  */
 
+import { asksInChinese, CJK_ERROR, englishChars } from './cjk.ts'
+
 /** Prompt origins that are not a task of the person's: nothing to plan or suggest for. */
 export const NOT_A_TASK: ReadonlySet<string> = new Set([
   'task-notification',
@@ -132,7 +134,7 @@ const TOOL_KINDS: Record<string, keyof Omit<Signals['recent_tools'], 'failed'>> 
   Task: 'subagents',
 }
 
-const PATH = /(?:^|[\s`'"(])((?:[\w.-]+\/)+[\w.-]+|[\w-]+\.(?:tsx?|jsx?|mjs|py|go|rs|java|kt|swift|rb|php|cs|c|cc|cpp|h|hpp|sql|json|ya?ml|toml|md|css|scss|html|sh|lock))(?=$|[\s`'"),:;])/g
+const PATH = /(?:^|[\s`'"(（「『“：，、]|[\u3040-\u30ff\u3400-\u9fff])((?:[\w.-]+\/)+[\w.-]+|[\w-]+\.(?:tsx?|jsx?|mjs|py|go|rs|java|kt|swift|rb|php|cs|c|cc|cpp|h|hpp|sql|json|ya?ml|toml|md|css|scss|html|sh|lock))(?=$|[\s`'"),:;）」』”，。、；：！？]|[\u3040-\u30ff\u3400-\u9fff])/g
 const CODE_OR_ERROR = /```|Traceback|Exception|\berror\b|\bfailed\b|stack ?trace|\bat \S+:\d+/i
 const QUESTION = /^(what|why|how|when|where|which|who|can|could|does|do|did|is|are|should|would|will)\b/i
 
@@ -149,10 +151,10 @@ export function signalsOf(prompt: string, messages: readonly ContextMessage[], w
     }
   }
   return {
-    prompt_chars: text.length,
+    prompt_chars: englishChars(text),
     files_mentioned: files.size,
-    has_code_or_error: CODE_OR_ERROR.test(text),
-    is_question: text.endsWith('?') || QUESTION.test(text),
+    has_code_or_error: CODE_OR_ERROR.test(text) || CJK_ERROR.test(text),
+    is_question: text.endsWith('?') || QUESTION.test(text) || asksInChinese(text),
     recent_tools: tools,
   }
 }

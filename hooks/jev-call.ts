@@ -17,6 +17,8 @@
  * router's block for the prompt (strategy advice). A part nobody took is
  * asked for by the router itself once the prompt comes back up.
  */
+
+import { CJK_CONTINUE } from './cjk.ts'
 import type { Miss } from './model-router.policy.ts'
 
 export interface Answer {
@@ -82,10 +84,11 @@ export function stillOffered(part: RouterPart): boolean {
 
 /**
  * A prompt that only says to go on with the work in progress ("continue",
- * "keep going"): the turn before already decided how to do that work, so
+ * "keep going", 继续, 请继续): the turn before already decided how to do that work, so
  * Jev isn't asked again. An approval ("yes", "go ahead", "do it") is not one:
  * it often starts the very work the turn before only proposed.
  */
 export function isContinuation(prompt: string): boolean {
-  return /^(?:please\s+)?(?:continue|go on|keep going|carry on|resume)(?:\s+please)?[.!]*$/i.test(prompt.trim())
+  const text = prompt.trim()
+  return /^(?:please\s+)?(?:continue|go on|keep going|carry on|resume)(?:\s+please)?[.!]*$/i.test(text) || CJK_CONTINUE.test(text)
 }
