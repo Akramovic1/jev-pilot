@@ -131,6 +131,7 @@ import {
 } from './skill-suggestion.policy.ts'
 import type { Candidate, PolicyConfig, Provider, Rerank, Skill, Suggestion, Wide } from './skill-suggestion.policy.ts'
 import { isContinuation, takePart } from './jev-call.ts'
+import { homeOf } from './crew-run.ts'
 
 export const register: Register = (on, options) => {
   const text = (key: string, fallback: string) =>
@@ -644,7 +645,7 @@ export const register: Register = (on, options) => {
       $.ui.log(`[jev-skill-suggestion] setup: could not list the skills: ${String(error)}`)
       return next({ ...e, text: setupAborted(`the skills could not be listed (${String(error)})`) })
     }
-    const home = (await $.env.get('HOME')) ?? '~'
+    const home = (await homeOf($.env)) ?? ''
     const settingsPath = `${home}/.claude/settings.json`
     const backupPath = `${home}/.claude/jev-pilot.skill-overrides.backup.json`
     let json: string | null = null

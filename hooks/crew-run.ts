@@ -10,7 +10,7 @@ import { codexModels, codexVerdict, crew, crewOverrides, crewStarted, setCodexMo
 
 export interface CrewIo {
   fetch: (url: string, init: { method?: string; headers?: Record<string, string>; body?: string }) => Promise<{ ok: boolean; status: number; text: string }>
-  /** $HOME and $JEV_ROUTER_URL: the only variables this reads. */
+  /** $HOME (or $USERPROFILE when HOME is unset) and $JEV_ROUTER_URL: the only variables this reads. */
   home: () => Promise<string | undefined>
   routerUrl: () => Promise<string | undefined>
   write: (path: string, text: string) => Promise<void>
@@ -23,6 +23,11 @@ export interface CrewIo {
   register: (spec: AgentSpec) => Promise<void>
 }
 
+/** The user's home directory: $HOME, or $USERPROFILE when HOME is unset (Windows launches without HOME). */
+export async function homeOf(env: { get(name: string): Promise<string | undefined> }): Promise<string | undefined> {
+  return (await env.get('HOME')) ?? (await env.get('USERPROFILE'))
+}
+
 export const CREW_KEY = 'crew'
 
 /** The router's address as shown to you: without the secret in its path. */
@@ -32,13 +37,13 @@ export function shownUrl(url: string): string {
 
 /** Where the router reads the slots from. */
 export async function modelsFile(io: CrewIo): Promise<string> {
-  const home = (await io.home()) ?? '~'
+  const home = (await io.home()) ?? ''
   return `${home}/.claude/jev-pilot/models.json`
 }
 
 /** The `/model` rows `claude-jev` passes to Claude Code with `--settings`. */
 export async function pickerFile(io: CrewIo): Promise<string> {
-  const home = (await io.home()) ?? '~'
+  const home = (await io.home()) ?? ''
   return `${home}/.claude/jev-pilot/picker.json`
 }
 

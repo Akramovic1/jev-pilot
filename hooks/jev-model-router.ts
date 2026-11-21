@@ -62,7 +62,7 @@ import { moodOf, say, setBoost, subagentLabel, turnSpeech } from './pet-art.ts'
 import { feature } from './features.ts'
 import { crewNote, JUNIOR_AGENT, juniorSlot, REVIEWERS, reviewerAgent, slotAlias, slotsOffered } from './crew.ts'
 import { crew, reviewerHealthy, router, slotUsable } from './crew-state.ts'
-import { ensureCrew, newFallbacks, startSession, type CrewIo } from './crew-run.ts'
+import { ensureCrew, homeOf, newFallbacks, startSession, type CrewIo } from './crew-run.ts'
 import { isContinuation, offerPart, stillOffered, type RouterPart } from './jev-call.ts'
 import { recordCorrection, recordSubagent, recordSubagentUsage, recordTurn, resetStats, shortStats } from './session-stats.ts'
 import type { ContextMessage } from './context.ts'
@@ -391,7 +391,7 @@ export const register: Register = (on, options) => {
     // file it reads; then every worker's health, in the background.
     const crewIo: CrewIo = {
       fetch: (url, init) => $.http.fetch(url, init),
-      home: () => $.env.get('HOME'),
+      home: () => homeOf($.env),
       routerUrl: () => $.env.get('JEV_ROUTER_URL'),
       write: (path, text) => $.fs.write(path, text),
       read: async (path) => ((await $.fs.exists(path)) ? $.fs.read(path) : null),
@@ -431,7 +431,7 @@ export const register: Register = (on, options) => {
     }
     const crewIo: CrewIo = {
       fetch: (url, init) => $.http.fetch(url, init),
-      home: () => $.env.get('HOME'),
+      home: () => homeOf($.env),
       routerUrl: () => $.env.get('JEV_ROUTER_URL'),
       write: (path, text) => $.fs.write(path, text),
       read: async (path) => ((await $.fs.exists(path)) ? $.fs.read(path) : null),
@@ -1000,7 +1000,7 @@ export const register: Register = (on, options) => {
         return next({ ...e, text: 'Tell the user the jev-pilot decision ledger was cleared. Change nothing else.' })
       }
       const entries = entriesOf(await $.store.get(LEDGER_KEY))
-      const home = (await $.env.get('HOME')) ?? '~'
+      const home = (await homeOf($.env)) ?? ''
       const settingsPath = `${home}/.claude/settings.json`
       // The key jev-pilot's options live under depends on how it was
       // installed (marketplace, --mod, --plugin-dir): read which exist.
@@ -1042,7 +1042,7 @@ export const register: Register = (on, options) => {
 
     const crewIo: CrewIo = {
       fetch: (url, init) => $.http.fetch(url, init),
-      home: () => $.env.get('HOME'),
+      home: () => homeOf($.env),
       routerUrl: () => $.env.get('JEV_ROUTER_URL'),
       write: (path, text) => $.fs.write(path, text),
       read: async (path) => ((await $.fs.exists(path)) ? $.fs.read(path) : null),
