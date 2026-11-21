@@ -17,7 +17,7 @@ import {
   slotsOffered,
 } from '../hooks/crew.ts'
 import { codexVerdict, crewStarted, healthOf, initCrew, opencodeVerdict, router, setHealth } from '../hooks/crew-state.ts'
-import { ensureCrew, registerCrew, type CrewIo } from '../hooks/crew-run.ts'
+import { ensureCrew, homeOf, modelsFile, pickerFile, registerCrew, type CrewIo } from '../hooks/crew-run.ts'
 import { capabilityNote, questions, readDecision, requestBody } from '../hooks/model-router.policy.ts'
 // @ts-expect-error: a plain .mjs module, for Node or Bun
 import { slotOf } from '../router/jev-router.mjs'
@@ -668,4 +668,18 @@ test('reviewer choices: set, kept in the record for every session, and back to t
   expect(crewOf({}, overridesOf({ reviewerChoices: { codex: { model: 'luna; rm', effort: 'high' } } })).reviewerChoices).toEqual({ codex: { effort: 'high' } })
   overrides = applyCrewCommand(overrides, { kind: 'reviewer-choice', reviewer: 'codex', choice: {} })
   expect(overrides.reviewerChoices).toEqual({})
+})
+
+// ---- where the slots files live when HOME is unset (Windows) ---------------------
+
+test('homeOf prefers HOME and falls back to USERPROFILE for Windows launches without HOME', async () => {
+  expect(await homeOf({ get: async (name) => (name === 'HOME' ? '/home/test' : undefined) })).toBe('/home/test')
+  expect(await homeOf({ get: async (name) => (name === 'USERPROFILE' ? 'C:/Users/u' : undefined) })).toBe('C:/Users/u')
+  expect(await homeOf({ get: async () => undefined })).toBeUndefined()
+})
+
+test('with no HOME the slots files never land in a literal ~ inside the project', async () => {
+  const io: CrewIo = { ...fakeIo([]), home: async () => undefined }
+  expect(await modelsFile(io)).toBe('/.claude/jev-pilot/models.json')
+  expect(await pickerFile(io)).toBe('/.claude/jev-pilot/picker.json')
 })
